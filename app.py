@@ -1026,7 +1026,7 @@ _render_steps()
 
 # 首页 Hero 中央示例图卡片（展示骨骼视频 + 报告范例）
 _hero_demo_candidates = [
-    Path(__file__).parent / "assets" / "hero_demo_example.jpg",
+    Path(__file__).parent / "assets:hero_demo_example.jpg",
     Path(__file__).parent / "hero_demo_example.jpg",
 ]
 _hero_demo_path = next((p for p in _hero_demo_candidates if p.exists()), None)
