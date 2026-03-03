@@ -917,6 +917,38 @@ def _get_analysis_stats() -> dict:
         return {}
 
 
+def _load_video_bytes_from_value(val: str | bytes | None):
+    """
+    从后端返回的字段中安全获取视频二进制：
+    - 若为 URL（http/https），使用 requests.get 拉取二进制流
+    - 若为 Base64 字符串，则尝试解码
+    - 其他情况返回 None
+    """
+    if not val:
+        return None
+    # 已经是二进制，直接返回
+    if isinstance(val, (bytes, bytearray)):
+        return bytes(val)
+    if not isinstance(val, str):
+        return None
+
+    v = val.strip()
+    try:
+        if v.lower().startswith(("http://", "https://")):
+            try:
+                resp = requests.get(v, timeout=30)
+                resp.raise_for_status()
+                return resp.content
+            except Exception as e:
+                print(f"[video] 通过 URL 获取视频失败: {e}")
+                return None
+        # 默认按 Base64 解码
+        return base64.b64decode(v)
+    except Exception as e:
+        print(f"[video] 解码视频数据失败: {e}")
+        return None
+
+
 def _get_video_duration_seconds(video_bytes: bytes) -> float | None:
     """
     通过临时文件 + OpenCV 估算视频时长（秒），失败时返回 None。
@@ -1195,6 +1227,13 @@ elif st.session_state.stage == "generating_preview":
                 st.rerun()
             st.stop()
 
+        # 调试：在任何 Base64/URL 解码前先打印后端返回的文件键名
+        try:
+            res_files = (result or {}).get("files", {}) or {}
+        except Exception:
+            res_files = {}
+        print(f"[modal] res_files.keys(): {list(res_files.keys())}")
+
         st.session_state["modal_result"] = result or {}
         if result.get("status") != "success":
             st.error(result.get("message", "分析失败"))
@@ -1218,9 +1257,15 @@ elif st.session_state.stage == "generating_preview":
 # ═══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.stage == "preview":
 
-    files            = st.session_state.get("modal_result", {}).get("files", {})
-    ski_b64          = files.get("ski_report_jpg")
-    skel_video_b64   = files.get("skeleton_video_mp4")
+    files = st.session_state.get("modal_result", {}).get("files", {}) or {}
+    # 再次打印一次 keys，便于前端调试不同后端返回结构
+    try:
+        print(f"[preview] res_files.keys(): {list(files.keys())}")
+    except Exception:
+        pass
+
+    ski_b64        = files.get("ski_report_jpg")
+    skel_video_val = files.get("skeleton_video_mp4")
 
     col_vid, col_pay = st.columns([3, 2])
 
@@ -1232,13 +1277,8 @@ elif st.session_state.stage == "preview":
             'AI 骨骼提取预览</div>',
             unsafe_allow_html=True,
         )
-        # 优先播放云端生成的骨骼视频，其次回退到原始上传视频
-        video_bytes = None
-        if skel_video_b64:
-            try:
-                video_bytes = base64.b64decode(skel_video_b64)
-            except Exception:
-                video_bytes = None
+        # 优先播放云端生成的骨骼视频（支持 Base64 或 URL），其次回退到原始上传视频
+        video_bytes = _load_video_bytes_from_value(skel_video_val)
         if not video_bytes:
             video_bytes = st.session_state.get("video_bytes")
 
@@ -1513,12 +1553,17 @@ elif st.session_state.stage == "paying":
 elif st.session_state.stage == "final":
 
     stats = _get_analysis_stats()
-    files             = st.session_state.get("modal_result", {}).get("files", {})
-    ski_b64           = files.get("ski_report_jpg")
-    coach_b64         = files.get("coach_report_png")
-    csv_b64           = files.get("analysis_csv")
-    skel_video_b64    = files.get("skeleton_video_mp4")
-    cmp_video_b64     = files.get("comparison_video_mp4")
+    files = st.session_state.get("modal_result", {}).get("files", {}) or {}
+    try:
+        print(f"[final] res_files.keys(): {list(files.keys())}")
+    except Exception:
+        pass
+
+    ski_b64       = files.get("ski_report_jpg")
+    coach_b64     = files.get("coach_report_png")
+    csv_b64       = files.get("analysis_csv")
+    skel_val      = files.get("skeleton_video_mp4")
+    cmp_val       = files.get("comparison_video_mp4")
 
     # 数据埋点（仅首次进入时写入）
     if not st.session_state.get("_db_saved"):
@@ -1647,18 +1692,8 @@ elif st.session_state.stage == "final":
     # 第三行：左右分屏对比视频
     # ══════════════════════════════════════════════════
     orig_bytes = st.session_state.get("video_bytes")
-    skel_bytes = None
-    cmp_bytes  = None
-    if skel_video_b64:
-        try:
-            skel_bytes = base64.b64decode(skel_video_b64)
-        except Exception:
-            skel_bytes = None
-    if cmp_video_b64:
-        try:
-            cmp_bytes = base64.b64decode(cmp_video_b64)
-        except Exception:
-            cmp_bytes = None
+    skel_bytes = _load_video_bytes_from_value(skel_val)
+    cmp_bytes  = _load_video_bytes_from_value(cmp_val)
 
     st.markdown(
         '<span class="section-label">左右分屏对比</span>'
@@ -1675,21 +1710,12 @@ elif st.session_state.stage == "final":
             st.info("原始视频不可用，请返回首页重新上传。")
     with v_col2:
         st.markdown('<div class="video-label">AI 骨骼纠偏</div>', unsafe_allow_html=True)
-        # --- 临时调试代码 ---
-        if not cmp_bytes and not skel_bytes:
-            st.error("⚠️ 警告：后端没有返回任何分析视频数据！")
-        elif cmp_bytes:
-            st.success("✅ 正在播放：冠军对比视频")
-        else:
-            st.success("✅ 正在播放：单人骨骼视频")
-        # ------------------
-
         # 优先播放云端生成的对比视频，其次回退到骨骼视频；不再回退到原片
         display_bytes = cmp_bytes or skel_bytes
         if display_bytes:
             st.video(display_bytes)
         else:
-            st.info("当前暂无法加载骨骼对比视频，请稍后重试。")
+            st.info("当前暂未生成骨骼对比视频，稍后可以重新尝试上传更清晰、时长更短的片段。")
 
     st.divider()
 
