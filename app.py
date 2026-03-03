@@ -265,7 +265,7 @@ INPUT_DIR      = Path(__file__).parent / "input_videos"
 DATABASE_CSV   = Path(__file__).parent / "database.csv"
 PAYMENT_STATUS = Path(__file__).parent / "payment_status.json"
 ORDERS_FILE    = Path(__file__).parent / "orders.json"
-MAX_VIDEO_DURATION_SEC = 30
+MAX_VIDEO_DURATION_SEC = 15
 
 
 def _get_modal_analyze_url() -> str:
@@ -292,16 +292,10 @@ def call_modal_backend(video_bytes: bytes) -> dict:
       1）优先使用 _get_modal_analyze_url()（即 st.secrets['MODAL_API_URL'] 或环境变量 MODAL_API_URL）
       2）最后回退到文件顶部的 MODAL_API_URL 常量。
 
-    预期后端返回结构示例（backend.py 中 analyze_skiing）：
+    预期后端返回结构示例（backend.py 中 analyze_skiing，异步模式）：
       {
-        "status": "success",
-        "message": "诊断完成！",
-        "files": {
-          "ski_report_jpg":  "<base64-encoded jpg bytes>",
-          "coach_report_png": "<base64-encoded png bytes>",
-          "analysis_csv":    "<base64-encoded csv bytes>"
-        },
-        "report_image": "<base64-encoded main preview image>"
+        "job_id": "<FunctionCall object_id>",
+        "status": "processing"
       }
     """
     try:
@@ -325,8 +319,8 @@ def _call_modal_analyze(video_bytes: bytes) -> dict:
     """
     对外部调用使用的统一封装入口。
 
-    所有触发 AI 分析的请求（如 STAGE 2 生成预览）都应通过本函数发送到云端，
-    以确保不会误用任何本地 main.py / process_videos 逻辑。
+    所有触发 AI 分析的请求（如 STAGE 2 生成预览）都应通过本函数发送到云端。
+    该函数只负责提交任务并返回后端给出的 job_id，不会同步等待分析完成。
     """
     return call_modal_backend(video_bytes)
 
@@ -1163,10 +1157,19 @@ if st.session_state.stage == "upload":
 
     st.markdown("<br>", unsafe_allow_html=True)
     btn_col, _ = st.columns([1, 2])
-    with btn_col:
-        start_btn = st.button("开始免费检测  →", use_container_width=True)
 
-    if start_btn:
+    # 防抖：同一页面生命周期内“开始免费检测”只触发一次，避免用户连点导致后台重复排队
+    if "start_clicked" not in st.session_state:
+        st.session_state.start_clicked = False
+
+    with btn_col:
+        start_btn = st.button(
+            "开始免费检测  →",
+            use_container_width=True,
+            disabled=st.session_state.start_clicked,
+        )
+
+    if start_btn and not st.session_state.start_clicked:
         if not uploaded:
             st.warning("请先上传滑雪视频！")
         elif not user_name.strip():
@@ -1176,12 +1179,15 @@ if st.session_state.stage == "upload":
             video_bytes = uploaded.read()
             duration_sec = _get_video_duration_seconds(video_bytes)
             if duration_sec is not None and duration_sec > MAX_VIDEO_DURATION_SEC:
-                st.error(f"视频时长约为 {duration_sec:.1f} 秒，已超过 {MAX_VIDEO_DURATION_SEC} 秒上限。"
-                         "请截取 30 秒以内的精彩片段重新上传，以保证分析速度和稳定性。")
+                st.error(
+                    f"视频时长约为 {duration_sec:.1f} 秒，已超过 {MAX_VIDEO_DURATION_SEC} 秒上限。"
+                    "请截取 15 秒以内的精彩片段重新上传，以保证分析速度和稳定性。"
+                )
             else:
                 st.session_state.user_name      = user_name.strip()
                 st.session_state.video_filename = uploaded.name
                 st.session_state.video_bytes    = video_bytes
+                st.session_state.start_clicked  = True
                 st.session_state.stage          = "generating_preview"
                 st.rerun()
 
@@ -1214,15 +1220,44 @@ elif st.session_state.stage == "generating_preview":
             unsafe_allow_html=True,
         )
 
+        # 第一步：提交任务，获取 job_id（后端异步执行 run_analysis）
         try:
-            with st.spinner("GPU 正在全力分析中，请勿关闭页面..."):
-                result = _call_modal_analyze(st.session_state.video_bytes)
+            submit_resp = _call_modal_analyze(st.session_state.video_bytes)
         except Exception as e:
             st.error(f"云端分析失败：{e}")
             st.info("请稍后重试，或联系客服。")
             if st.button("重新上传"):
-                for k in ["stage", "preview_done", "analysis_done",
-                          "video_bytes", "video_filename", "modal_result"]:
+                for k in ["stage", "preview_done", "analysis_done", "start_clicked",
+                          "video_bytes", "video_filename", "modal_result", "job_id"]:
+                    st.session_state.pop(k, None)
+                st.rerun()
+            st.stop()
+
+        job_id = (submit_resp or {}).get("job_id")
+        if not job_id:
+            st.error(f"云端未返回 job_id，响应内容：{submit_resp}")
+            if st.button("重新上传"):
+                for k in ["stage", "preview_done", "analysis_done", "start_clicked",
+                          "video_bytes", "video_filename", "modal_result", "job_id"]:
+                    st.session_state.pop(k, None)
+                st.rerun()
+            st.stop()
+
+        st.session_state["job_id"] = job_id
+
+        # 第二步：使用 Modal FunctionCall 轮询，直到分析完成
+        try:
+            progress_bar.progress(40, text="GPU 正在全力分析中…")
+            with st.spinner("GPU 正在全力分析中，请勿关闭页面..."):
+                call = modal.FunctionCall.from_id(job_id)
+                # run_analysis 超时时间为 1200 秒，这里略小一些即可
+                result = call.get(timeout=1200)
+        except Exception as e:
+            st.error(f"云端分析轮询失败：{e}")
+            st.info("请稍后重试，或联系客服。")
+            if st.button("重新上传"):
+                for k in ["stage", "preview_done", "analysis_done", "start_clicked",
+                          "video_bytes", "video_filename", "modal_result", "job_id"]:
                     st.session_state.pop(k, None)
                 st.rerun()
             st.stop()
@@ -1237,6 +1272,15 @@ elif st.session_state.stage == "generating_preview":
         st.session_state["modal_result"] = result or {}
         if result.get("status") != "success":
             st.error(result.get("message", "分析失败"))
+            st.stop()
+
+        # 若云端结果中未包含任何骨骼视频相关 key，则直接在生成阶段报错，避免后续空白预览。
+        if "skeleton_video_mp4" not in res_files and "comparison_video_mp4" not in res_files:
+            st.error(
+                "云端分析已完成，但结果中未包含骨骼视频文件。"
+                "请稍后重试，如多次出现请联系开发者排查后端。"
+            )
+            st.write(f"后端返回的文件键：{list(res_files.keys())}")
             st.stop()
 
         progress_bar.progress(100, text="云端分析完成")
@@ -1263,6 +1307,14 @@ elif st.session_state.stage == "preview":
         print(f"[preview] res_files.keys(): {list(files.keys())}")
     except Exception:
         pass
+
+    # 若缺少骨骼视频相关 key，则在预览阶段直接提示错误，避免误以为分析成功。
+    if "skeleton_video_mp4" not in files and "comparison_video_mp4" not in files:
+        st.error(
+            "云端结果中未包含骨骼视频，请返回上一页重新上传更清晰、时长更短的片段后重试。"
+        )
+        st.write(f"后端返回的文件键：{list(files.keys())}")
+        st.stop()
 
     ski_b64        = files.get("ski_report_jpg")
     skel_video_val = files.get("skeleton_video_mp4")
@@ -1466,7 +1518,7 @@ elif st.session_state.stage == "preview":
     _, back_col = st.columns([4, 1])
     with back_col:
         if st.button("← 重新上传", use_container_width=True):
-            for k in ["stage", "preview_done", "analysis_done",
+            for k in ["stage", "preview_done", "analysis_done", "start_clicked",
                       "video_bytes", "video_filename", "order_id", "pay_url",
                       "_show_code_input"]:
                 st.session_state.pop(k, None)
