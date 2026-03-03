@@ -20,19 +20,17 @@ from urllib.parse import urlencode, urlparse, parse_qs
 from datetime import datetime
 from pathlib import Path
 
-import modal
-
 _CACHE = os.path.join(os.path.dirname(__file__), ".matplotlib-cache")
 os.makedirs(_CACHE, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", _CACHE)
 
 # ════════════════════════════════════════════════════════════════════════════════
-# Modal 后端 API 基础地址（由工具脚本自动同步）
-# 默认值仅为占位，请使用 sync_modal_api_url.py 更新为最新的 modal.run URL。
+# Modal 后端 API 基础地址（web_api，不含 /analyze、/status 等路径）
+# 可通过环境变量 MODAL_API_URL 或 st.secrets["MODAL_API_URL"] 覆盖。
 # ════════════════════════════════════════════════════════════════════════════════
 MODAL_API_URL = os.environ.get(
     "MODAL_API_URL",
-    "https://henryhed--ski-pro-api-web-api.modal.run",
+    "https://henryhed--ski-pro-ai-api-web-api.modal.run",
 )
 
 import numpy as np
@@ -268,12 +266,8 @@ ORDERS_FILE    = Path(__file__).parent / "orders.json"
 MAX_VIDEO_DURATION_SEC = 15
 
 
-def _get_modal_analyze_url() -> str:
-    """
-    获取 Modal 后端完整 URL，由配置直接提供。
-    不在此函数中追加 /analyze 等路径，防止与子域或已有路径重复。
-    优先从 st.secrets["MODAL_API_URL"] 读取，其次环境变量，最后用默认常量。
-    """
+def _get_modal_base_url() -> str:
+    """获取 Modal web_api 的 base URL（不含 /analyze、/status）。优先 secrets，其次环境变量，最后常量。"""
     base = ""
     try:
         base = (st.secrets.get("MODAL_API_URL") or "").strip()
@@ -281,48 +275,50 @@ def _get_modal_analyze_url() -> str:
         pass
     if not base:
         base = (os.environ.get("MODAL_API_URL") or MODAL_API_URL or "").strip()
-    return base
+    return base.rstrip("/")
 
 
-def call_modal_backend(video_bytes: bytes) -> dict:
+def call_modal_submit(video_bytes: bytes, filename: str) -> dict:
     """
-    把原始视频 bytes 发送到 Modal 后端进行分析。
-
-    URL 选择顺序：
-      1）优先使用 _get_modal_analyze_url()（即 st.secrets['MODAL_API_URL'] 或环境变量 MODAL_API_URL）
-      2）最后回退到文件顶部的 MODAL_API_URL 常量。
-
-    预期后端返回结构示例（backend.py 中 analyze_skiing，异步模式）：
-      {
-        "job_id": "<FunctionCall object_id>",
-        "status": "processing"
-      }
+    POST base_url + "/analyze" 用 multipart/form-data 上传视频，提交分析任务。
+    返回响应 JSON，其中应包含 job_id。
     """
-    try:
-        api_url = _get_modal_analyze_url().strip()
-    except Exception:
-        api_url = (MODAL_API_URL or "").strip()
-    if not api_url:
+    base = _get_modal_base_url()
+    if not base:
         raise RuntimeError("未配置 MODAL_API_URL")
-
-    video_b64 = base64.b64encode(video_bytes).decode("utf-8")
-    resp = requests.post(
-        api_url,
-        json={"video": video_b64},
-        timeout=600,
-    )
+    url = f"{base}/analyze"
+    files = {"video": (filename or "video.mp4", video_bytes, "video/mp4")}
+    resp = requests.post(url, files=files, timeout=120)
     resp.raise_for_status()
     return resp.json()
 
 
-def _call_modal_analyze(video_bytes: bytes) -> dict:
+def poll_modal_status(base_url: str, job_id: str, interval_sec: float = 2.0, timeout_sec: float = 1200) -> dict:
     """
-    对外部调用使用的统一封装入口。
+    轮询 GET base_url + "/status/" + job_id，直到 status 为 "done" 或 "error"。
+    返回最后一次响应的完整 JSON（即 meta，含 files 等）。
+    """
+    url = f"{base_url.rstrip('/')}/status/{job_id}"
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        resp = requests.get(url, timeout=60)
+        resp.raise_for_status()
+        meta = resp.json()
+        status = (meta or {}).get("status")
+        if status == "done":
+            return meta
+        if status == "error":
+            return meta
+        time.sleep(interval_sec)
+    raise TimeoutError(f"轮询超时（{timeout_sec} 秒）未得到完成状态")
 
-    所有触发 AI 分析的请求（如 STAGE 2 生成预览）都应通过本函数发送到云端。
-    该函数只负责提交任务并返回后端给出的 job_id，不会同步等待分析完成。
+
+def _call_modal_analyze(video_bytes: bytes, filename: str = "video.mp4") -> dict:
     """
-    return call_modal_backend(video_bytes)
+    提交分析任务到 Modal web_api，仅返回提交响应（含 job_id）。
+    不在此处轮询；调用方需自行轮询 GET /status/{job_id}。
+    """
+    return call_modal_submit(video_bytes, filename)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1220,9 +1216,12 @@ elif st.session_state.stage == "generating_preview":
             unsafe_allow_html=True,
         )
 
-        # 第一步：提交任务，获取 job_id（后端异步执行 run_analysis）
+        # 第一步：POST /analyze 上传视频，获取 job_id
         try:
-            submit_resp = _call_modal_analyze(st.session_state.video_bytes)
+            submit_resp = _call_modal_analyze(
+                st.session_state.video_bytes,
+                st.session_state.get("video_filename") or "video.mp4",
+            )
         except Exception as e:
             st.error(f"云端分析失败：{e}")
             st.info("请稍后重试，或联系客服。")
@@ -1245,13 +1244,12 @@ elif st.session_state.stage == "generating_preview":
 
         st.session_state["job_id"] = job_id
 
-        # 第二步：使用 Modal FunctionCall 轮询，直到分析完成
+        # 第二步：轮询 GET /status/{job_id}，直到 status 为 done 或 error（纯 HTTP，不用 Modal SDK）
         try:
             progress_bar.progress(40, text="GPU 正在全力分析中…")
             with st.spinner("GPU 正在全力分析中，请勿关闭页面..."):
-                call = modal.FunctionCall.from_id(job_id)
-                # run_analysis 超时时间为 1200 秒，这里略小一些即可
-                result = call.get(timeout=1200)
+                base_url = _get_modal_base_url()
+                result = poll_modal_status(base_url, job_id, interval_sec=2.0, timeout_sec=1200)
         except Exception as e:
             st.error(f"云端分析轮询失败：{e}")
             st.info("请稍后重试，或联系客服。")
@@ -1270,8 +1268,16 @@ elif st.session_state.stage == "generating_preview":
         print(f"[modal] res_files.keys(): {list(res_files.keys())}")
 
         st.session_state["modal_result"] = result or {}
-        if result.get("status") != "success":
-            st.error(result.get("message", "分析失败"))
+        if result.get("status") == "error":
+            st.error(result.get("error", "分析失败"))
+            if st.button("重新上传"):
+                for k in ["stage", "preview_done", "analysis_done", "start_clicked",
+                          "video_bytes", "video_filename", "modal_result", "job_id"]:
+                    st.session_state.pop(k, None)
+                st.rerun()
+            st.stop()
+        if result.get("status") != "done":
+            st.error("分析未完成，请稍后重试。")
             st.stop()
 
         # 若云端结果中未包含任何骨骼视频相关 key，则直接在生成阶段报错，避免后续空白预览。
