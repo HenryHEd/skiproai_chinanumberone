@@ -1024,6 +1024,15 @@ st.markdown("""
 
 _render_steps()
 
+# 首页 Hero 中央示例图卡片（展示骨骼视频 + 报告范例）
+_hero_demo_path = Path(__file__).parent / "assets" / "hero_demo_example.png"
+if _hero_demo_path.exists():
+    st.markdown('<div class="apple-card animate-in" '
+                'style="max-width:960px;margin:0 auto 1.8rem;padding:0;overflow:hidden">',
+                unsafe_allow_html=True)
+    st.image(str(_hero_demo_path), use_column_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Z-Pay GET 回调捕获（notify_url 与 return_url 均指向本页）
