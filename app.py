@@ -1675,8 +1675,17 @@ elif st.session_state.stage == "final":
             st.info("原始视频不可用，请返回首页重新上传。")
     with v_col2:
         st.markdown('<div class="video-label">AI 骨骼纠偏</div>', unsafe_allow_html=True)
-        # 优先播放云端生成的对比视频，其次回退到骨骼视频，最后回退到原片
-        display_bytes = cmp_bytes or skel_bytes or orig_bytes
+        # --- 临时调试代码 ---
+        if not cmp_bytes and not skel_bytes:
+            st.error("⚠️ 警告：后端没有返回任何分析视频数据！")
+        elif cmp_bytes:
+            st.success("✅ 正在播放：冠军对比视频")
+        else:
+            st.success("✅ 正在播放：单人骨骼视频")
+        # ------------------
+
+        # 优先播放云端生成的对比视频，其次回退到骨骼视频；不再回退到原片
+        display_bytes = cmp_bytes or skel_bytes
         if display_bytes:
             st.video(display_bytes)
         else:
