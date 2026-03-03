@@ -1025,8 +1025,12 @@ st.markdown("""
 _render_steps()
 
 # 首页 Hero 中央示例图卡片（展示骨骼视频 + 报告范例）
-_hero_demo_path = Path(__file__).parent / "assets" / "hero_demo_example.png"
-if _hero_demo_path.exists():
+_hero_demo_candidates = [
+    Path(__file__).parent / "assets" / "hero_demo_example.jpg",
+    Path(__file__).parent / "hero_demo_example.jpg",
+]
+_hero_demo_path = next((p for p in _hero_demo_candidates if p.exists()), None)
+if _hero_demo_path is not None:
     st.markdown('<div class="apple-card animate-in" '
                 'style="max-width:960px;margin:0 auto 1.8rem;padding:0;overflow:hidden">',
                 unsafe_allow_html=True)
