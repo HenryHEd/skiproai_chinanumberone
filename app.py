@@ -693,15 +693,7 @@ hr {
     letter-spacing: 0.02em;
 }
 
-/* ── 激活码卡片 ── */
-.code-card {
-    background: rgba(255,255,255,0.75);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-radius: 16px;
-    padding: 1.4rem 1.6rem;
-    border: 1px dashed rgba(0,113,227,0.3);
-    margin-top: 1rem;
+
 }
 
 /* ── AI 教练寄语卡片 ── */
@@ -1077,21 +1069,63 @@ if st.session_state.stage == "pay_first":
     _, center_col, _ = st.columns([1, 1.8, 1])
     with center_col:
         st.markdown('<div class="apple-card animate-in">', unsafe_allow_html=True)
+        # 标题 + 说明
         st.markdown(
             '<div style="font-size:1.5rem;font-weight:600;color:#1d1d1f;'
-            'letter-spacing:-0.02em;margin-bottom:0.6rem">感谢为中国算力支持</div>'
-            '<p style="color:#6e6e73;font-size:0.95rem;line-height:1.7;margin-bottom:1.5rem">'
-            '您的支持将用于 GPU 算力与 AI 分析服务，支付完成后即可上传滑雪视频并获取专业级姿态诊断报告。</p>',
+            'letter-spacing:-0.02em;margin-bottom:0.6rem">感谢为算力算法支持</div>'
+            '<p style="color:#6e6e73;font-size:0.95rem;line-height:1.7;margin-bottom:1.2rem">'
+            '您的支持将用于 GPU 算力与滑雪姿态分析算法迭代，支付完成后即可上传滑雪视频并获取完整专业诊断服务。</p>',
             unsafe_allow_html=True,
         )
+        # 支付后将获得的内容预览
         st.markdown(
-            f'<div style="text-align:center;margin:1rem 0 1.2rem">'
+            """
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.9rem;margin-bottom:1.1rem">
+  <div style="display:flex;gap:0.6rem;align-items:flex-start">
+    <div style="width:28px;height:28px;border-radius:9px;background:rgba(0,113,227,0.08);
+                display:flex;align-items:center;justify-content:center;font-size:1.1rem">🦴</div>
+    <div>
+      <div style="font-size:0.9rem;font-weight:600;color:#1d1d1f">骨骼数据</div>
+      <div style="font-size:0.8rem;color:#6e6e73">逐帧姿态关键点与立刃角等核心曲线</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:0.6rem;align-items:flex-start">
+    <div style="width:28px;height:28px;border-radius:9px;background:rgba(52,199,89,0.10);
+                display:flex;align-items:center;justify-content:center;font-size:1.1rem">📄</div>
+    <div>
+      <div style="font-size:0.9rem;font-weight:600;color:#1d1d1f">专业报告</div>
+      <div style="font-size:0.8rem;color:#6e6e73">一页式可视化战力雷达与关键指标解读</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:0.6rem;align-items:flex-start">
+    <div style="width:28px;height:28px;border-radius:9px;background:rgba(255,159,10,0.10);
+                display:flex;align-items:center;justify-content:center;font-size:1.1rem">🤖</div>
+    <div>
+      <div style="font-size:0.9rem;font-weight:600;color:#1d1d1f">AI 指导</div>
+      <div style="font-size:0.8rem;color:#6e6e73">针对发力、立刃、重心等给出训练建议</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:0.6rem;align-items:flex-start">
+    <div style="width:28px;height:28px;border-radius:9px;background:rgba(88,86,214,0.10);
+                display:flex;align-items:center;justify-content:center;font-size:1.1rem">🎬</div>
+    <div>
+      <div style="font-size:0.9rem;font-weight:600;color:#1d1d1f">算法视频</div>
+      <div style="font-size:0.8rem;color:#6e6e73">原片 vs 骨骼分屏对比 + 关键帧回放</div>
+    </div>
+  </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+        # 价格与按钮
+        st.markdown(
+            f'<div style="text-align:center;margin:0.6rem 0 1.0rem">'
             f'<span style="color:#0071e3;font-size:2rem;font-weight:700">{_zpay.price_label}</span>'
             f'<span style="color:#6e6e73;font-size:0.9rem;margin-left:0.3rem"> 开始使用</span></div>',
             unsafe_allow_html=True,
         )
         pay_start_btn = st.button(
-            f"支持中国算力 {_zpay.price_label} 开始使用  💚",
+            f"支持算力算法 {_zpay.price_label} 开始使用  💚",
             use_container_width=True,
             type="primary",
         )
