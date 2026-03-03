@@ -167,28 +167,6 @@ def _ensure_h264(video_path: Path) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 激活码系统
-# ═══════════════════════════════════════════════════════════════════════════════
-CODES_FILE = Path(__file__).parent / "codes.txt"
-
-# 硬编码的保底合伙人码（即使 codes.txt 不存在也有效）
-_BUILTIN_CODES = {"SKI666", "PRO888", "VIPSKI", "SKILAB"}
-
-def _load_codes() -> set:
-    codes = set(_BUILTIN_CODES)
-    if CODES_FILE.exists():
-        for line in CODES_FILE.read_text(encoding="utf-8").splitlines():
-            c = line.strip().upper()
-            if c:
-                codes.add(c)
-    return codes
-
-def verify_access_code(code: str) -> bool:
-    """验证激活码是否合法（不区分大小写）"""
-    return code.strip().upper() in _load_codes()
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # Z-Pay 易支付服务类
 # ═══════════════════════════════════════════════════════════════════════════════
 class ZPayService:
@@ -201,8 +179,8 @@ class ZPayService:
         default_cb       = "https://henryhed--ski-pro-ai-streamlit-app.modal.run/"
         self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", default_cb)
         self.return_url  = os.environ.get("ZPAY_RETURN_URL", self.notify_url)
-        self.price_yuan  = "9.99"
-        self.price_label = "¥9.99"
+        self.price_yuan  = "0.01"
+        self.price_label = "¥0.01"
         self.pay_type    = "wxpay"
         self.site_name   = "Ski Pro AI"
 
@@ -763,8 +741,8 @@ hr {
 # ═══════════════════════════════════════════════════════════════════════════════
 def _init_state():
     defaults = {
-        # upload → generating_preview → preview → paying → final
-        "stage":            "upload",
+        # pay_first → (pay) → upload → generating_preview → preview → final
+        "stage":            "pay_first",
         "order_id":         None,
         "user_name":        "",
         "video_filename":   "",
@@ -986,12 +964,12 @@ def _save_uploaded_video(video_bytes: bytes, filename: str) -> Path:
 # ═══════════════════════════════════════════════════════════════════════════════
 # 步骤指示器
 # ═══════════════════════════════════════════════════════════════════════════════
-_STAGE_ORDER = ["upload", "generating_preview", "preview", "paying", "final"]
+_STAGE_ORDER = ["pay_first", "upload", "generating_preview", "preview", "final"]
 _STAGE_LABEL = {
+    "pay_first":          "支付",
     "upload":             "上传",
     "generating_preview": "提取",
     "preview":            "预览",
-    "paying":             "支付",
     "final":              "报告",
 }
 
@@ -1081,18 +1059,58 @@ if _qp.get("trade_status") == "TRADE_SUCCESS":
             print(f"[zpay-cb] GET 回调写入成功: {_cb_order}")
             # 清空 query params，防止刷新重复处理
             st.query_params.clear()
-            # 如果当前订单号匹配，直接跳转到结果页
             if st.session_state.get("order_id") == _cb_order:
-                st.session_state.stage = "final"
+                # 若已生成预览/分析完成，跳转报告页；否则为「先付后传」流程，跳转上传页
+                if st.session_state.get("preview_done") or st.session_state.get("analysis_done"):
+                    st.session_state.stage = "final"
+                else:
+                    st.session_state.stage = "upload"
                 st.rerun()
     else:
         print(f"[zpay-cb] 签名校验失败: {dict(_qp)}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STAGE 1 — 首页与上传
+# STAGE 0 — 先支付后上传（感谢为中国算力支持）
 # ═══════════════════════════════════════════════════════════════════════════════
-if st.session_state.stage == "upload":
+if st.session_state.stage == "pay_first":
+    _, center_col, _ = st.columns([1, 1.8, 1])
+    with center_col:
+        st.markdown('<div class="apple-card animate-in">', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="font-size:1.5rem;font-weight:600;color:#1d1d1f;'
+            'letter-spacing:-0.02em;margin-bottom:0.6rem">感谢为中国算力支持</div>'
+            '<p style="color:#6e6e73;font-size:0.95rem;line-height:1.7;margin-bottom:1.5rem">'
+            '您的支持将用于 GPU 算力与 AI 分析服务，支付完成后即可上传滑雪视频并获取专业级姿态诊断报告。</p>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f'<div style="text-align:center;margin:1rem 0 1.2rem">'
+            f'<span style="color:#0071e3;font-size:2rem;font-weight:700">{_zpay.price_label}</span>'
+            f'<span style="color:#6e6e73;font-size:0.9rem;margin-left:0.3rem"> 开始使用</span></div>',
+            unsafe_allow_html=True,
+        )
+        pay_start_btn = st.button(
+            f"支持中国算力 {_zpay.price_label} 开始使用  💚",
+            use_container_width=True,
+            type="primary",
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if pay_start_btn:
+        order_id = _make_order_id()
+        st.session_state.order_id = order_id
+        st.session_state.pay_type = "wxpay"
+        st.session_state.pay_url = _zpay.generate_pay_url(order_id=order_id, pay_type="wxpay")
+        _save_order(order_id, _zpay.price_yuan)
+        st.session_state.stage = "paying"
+        st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STAGE 1 — 上传视频（支付完成后可见）
+# ═══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.stage == "upload":
 
     col_left, col_right = st.columns([3, 2])
 
@@ -1404,19 +1422,17 @@ elif st.session_state.stage == "preview":
                 '</div>',
                 unsafe_allow_html=True,
             )
-    # ── 右侧：解锁卡片（双入口）
+    # ── 右侧：已支付，进入完整报告
     with col_pay:
         st.markdown('<div class="unlock-card animate-in">', unsafe_allow_html=True)
-
         st.markdown(
             '<span class="section-label">深度诊断报告</span>'
             '<div style="font-size:1.5rem;font-weight:700;color:#1d1d1f;'
-            'letter-spacing:-0.025em;margin-bottom:0.3rem">解锁深度 AI 诊断报告</div>'
+            'letter-spacing:-0.025em;margin-bottom:0.3rem">您已支持中国算力</div>'
             '<p style="color:#6e6e73;font-size:0.88rem;margin-bottom:1.2rem">'
-            '解锁后立即获得以下专业内容</p>',
+            '分析已完成，点击下方查看完整诊断报告</p>',
             unsafe_allow_html=True,
         )
-
         st.markdown("""
 <div style="display:flex;flex-direction:column;gap:0">
   <div class="feature-row">
@@ -1445,89 +1461,25 @@ elif st.session_state.stage == "preview":
   </div>
 </div>
 """, unsafe_allow_html=True)
-
-        st.markdown(
-            '<div style="margin-top:1.4rem;padding-top:1.2rem;'
-            'border-top:1px solid rgba(0,0,0,0.07);text-align:center">'
-            '<span style="color:#6e6e73;font-size:0.82rem;display:block;margin-bottom:0.2rem">'
-            '一次性深度诊断 · 微信支付</span>'
-            '<span style="color:#0071e3;font-size:2.2rem;font-weight:700;'
-            'letter-spacing:-0.03em">¥9.99</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # 按钮 A：微信支付解锁
-        unlock_pay_btn = st.button(
-            "微信支付 ¥9.99 解锁深度分析  💚",
+        view_report_btn = st.button(
+            "查看完整报告  →",
             use_container_width=True,
+            type="primary",
         )
-
-        # 按钮 B：合伙人激活码
-        st.markdown(
-            '<div style="text-align:center;margin:0.6rem 0 0.3rem">'
-            '<span style="font-size:0.82rem;color:#aeaeb2">或使用</span></div>',
-            unsafe_allow_html=True,
-        )
-        show_code_input = st.button(
-            "合伙人内测码解锁  🤝",
-            use_container_width=True,
-            key="show_code_btn",
-        )
-
-    # 激活码输入框（展开状态）
-    if st.session_state.get("_show_code_input") or show_code_input:
-        st.session_state["_show_code_input"] = True
-        st.markdown('<div class="code-card animate-in">', unsafe_allow_html=True)
-        st.markdown(
-            '<div style="font-size:0.9rem;font-weight:600;color:#1d1d1f;margin-bottom:0.6rem">'
-            '输入合伙人内测激活码</div>',
-            unsafe_allow_html=True,
-        )
-        code_input_col, code_btn_col = st.columns([3, 1])
-        with code_input_col:
-            access_code = st.text_input(
-                "激活码",
-                placeholder="例如：SKI666",
-                label_visibility="collapsed",
-                key="access_code_input",
-            )
-        with code_btn_col:
-            verify_btn = st.button("验证", use_container_width=True, key="verify_code_btn")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        if verify_btn:
-            if verify_access_code(access_code):
-                st.success("激活码有效！正在解锁深度报告…")
-                st.session_state["_show_code_input"] = False
-                st.session_state.stage = "final"
-                time.sleep(0.6)
-                st.rerun()
-            else:
-                st.error("激活码无效，请核对后重试，或联系合伙人获取。")
-
-    if unlock_pay_btn:
-        order_id = _make_order_id()
-        st.session_state.order_id  = order_id
-        st.session_state.pay_type  = "wxpay"
-        st.session_state.pay_url   = _zpay.generate_pay_url(
-            order_id=order_id,
-            pay_type="wxpay",
-        )
-        _save_order(order_id, _zpay.price_yuan)
-        st.session_state.stage = "paying"
-        st.rerun()
+        if view_report_btn:
+            st.session_state.stage = "final"
+            st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     _, back_col = st.columns([4, 1])
     with back_col:
         if st.button("← 重新上传", use_container_width=True):
-            for k in ["stage", "preview_done", "analysis_done", "start_clicked",
-                      "video_bytes", "video_filename", "order_id", "pay_url",
-                      "_show_code_input"]:
+            for k in ["preview_done", "analysis_done", "start_clicked",
+                      "video_bytes", "video_filename", "modal_result", "job_id"]:
                 st.session_state.pop(k, None)
+            st.session_state.stage = "upload"
             st.rerun()
 
 
@@ -1580,15 +1532,23 @@ elif st.session_state.stage == "paying":
     st.markdown("<br>", unsafe_allow_html=True)
     back_col, manual_col, _ = st.columns([1, 1, 3])
     with back_col:
-        if st.button("← 返回预览"):
-            st.session_state.stage = "preview"
-            st.rerun()
+        if st.session_state.get("preview_done") or st.session_state.get("analysis_done"):
+            if st.button("← 返回预览"):
+                st.session_state.stage = "preview"
+                st.rerun()
+        else:
+            if st.button("← 返回"):
+                st.session_state.stage = "pay_first"
+                st.rerun()
     with manual_col:
         if st.button("✅ 我已完成支付"):
             with st.spinner("正在向 Z-Pay 查询订单状态…"):
                 paid = _check_payment_status(order_id)
             if paid:
-                st.session_state.stage = "final"
+                if st.session_state.get("preview_done") or st.session_state.get("analysis_done"):
+                    st.session_state.stage = "final"
+                else:
+                    st.session_state.stage = "upload"
                 st.rerun()
             else:
                 st.warning("暂未收到支付确认，请稍等几秒后再试。")
@@ -1597,7 +1557,10 @@ elif st.session_state.stage == "paying":
     # 每次 rerun 都向 Z-Pay API 查一次，查到已付款立即跳转
     _pay_checked = _check_payment_status(order_id)
     if _pay_checked:
-        st.session_state.stage = "final"
+        if st.session_state.get("preview_done") or st.session_state.get("analysis_done"):
+            st.session_state.stage = "final"
+        else:
+            st.session_state.stage = "upload"
         st.rerun()
     else:
         # 等待 4 秒后自动 rerun，持续轮询，无需用户手动刷新
@@ -1629,7 +1592,7 @@ elif st.session_state.stage == "final":
             "upload_time":          datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "user_name":            st.session_state.user_name,
             "video_filename":       st.session_state.video_filename,
-            "order_id":             st.session_state.get("order_id", "CODE_UNLOCK"),
+            "order_id":             st.session_state.get("order_id", "PAID"),
             "avg_similarity_score": stats.get("avg_similarity_score", ""),
             "max_edge_angle":       stats.get("max_edge_angle", ""),
         }
