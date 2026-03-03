@@ -1,0 +1,26 @@
+# Ski Pro AI — Python 依赖
+# 安装命令：pip install -r requirements.txt
+
+# Modal 云部署（仅部署时需要，本地开发可选）
+modal>=0.64.0
+
+# Web 框架
+streamlit>=1.32.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+
+# 支付
+payjs>=1.2.5
+
+# 二维码生成（fallback，当 PayJS 返回的 qrcode URL 无法访问时本地生成）
+qrcode[pil]>=7.4.2
+
+# 核心计算（main.py 依赖，若 venv 里已有可跳过）
+
+numpy>=1.26.0
+pandas>=2.2.0
+Pillow>=10.3.0
+
+#手动添加
+plotly>=5.20.0
+requests>=2.31.0
