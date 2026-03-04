@@ -1242,22 +1242,31 @@ elif st.session_state.stage == "upload":
                     st.warning("请填写您的昵称！")
                 else:
                     video_bytes = uploaded.read()
-                    duration_sec = _get_video_duration_seconds(video_bytes)
-                    if duration_sec is not None and duration_sec > MAX_VIDEO_DURATION_SEC:
+                    max_size_mb = 50
+                    max_size_bytes = max_size_mb * 1024 * 1024
+                    if len(video_bytes) > max_size_bytes:
+                        size_mb = len(video_bytes) / 1024 / 1024
                         st.error(
-                            f"视频时长约为 {duration_sec:.1f} 秒，已超过 {MAX_VIDEO_DURATION_SEC} 秒上限。"
-                            "请截取 15 秒以内的精彩片段重新上传，以保证分析速度和稳定性。"
+                            f"当前视频大小约为 {size_mb:.1f} MB，超过 {max_size_mb} MB 上限。"
+                            "请先在手机中裁剪或压缩后，再重新上传进行分析。"
                         )
                     else:
-                        st.session_state.user_name      = user_name.strip()
-                        st.session_state.video_filename  = uploaded.name
-                        st.session_state.video_bytes     = video_bytes
-                        st.session_state.start_clicked   = True
-                        st.rerun()
+                        duration_sec = _get_video_duration_seconds(video_bytes)
+                        if duration_sec is not None and duration_sec > MAX_VIDEO_DURATION_SEC:
+                            st.error(
+                                f"视频时长约为 {duration_sec:.1f} 秒，已超过 {MAX_VIDEO_DURATION_SEC} 秒上限。"
+                                "请截取 15 秒以内的精彩片段重新上传，以保证分析速度和稳定性。"
+                            )
+                        else:
+                            st.session_state.user_name      = user_name.strip()
+                            st.session_state.video_filename  = uploaded.name
+                            st.session_state.video_bytes     = video_bytes
+                            st.session_state.start_clicked   = True
+                            st.rerun()
 
     else:
         with ui_placeholder.container():
-            st.info("🚀 任务已提交，正在激活云端 GPU 并分析视频...")
+            st.info("🚀 任务已提交，正在激活云端 GPU 并分析视频...(期间不可关闭此网页)")
             progress_bar = st.progress(0)
             status_text = st.empty()
 
