@@ -760,6 +760,18 @@ _init_state()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 根据 URL 恢复阶段与订单号（支持刷新 / 分享链接）
+# ═══════════════════════════════════════════════════════════════════════════════
+_qp_url = st.query_params
+_stage_q = _qp_url.get("stage")
+if _stage_q in ("pay_first", "upload", "generating_preview", "preview", "final"):
+    st.session_state.stage = _stage_q
+_order_q = _qp_url.get("order_id")
+if _order_q:
+    st.session_state.order_id = _order_q
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # 工具函数
 # ═══════════════════════════════════════════════════════════════════════════════
 def _make_order_id() -> str:
@@ -1988,6 +2000,22 @@ elif st.session_state.stage == "final":
         '</div>',
         unsafe_allow_html=True,
     )
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 将当前阶段与订单号同步到 URL（避免刷新后回到首页）
+    # ══════════════════════════════════════════════════════════════════════════
+    try:
+        cur_stage = st.session_state.get("stage", "pay_first")
+        cur_order = st.session_state.get("order_id") or ""
+        qp = st.query_params
+        if qp.get("stage") != cur_stage or qp.get("order_id", "") != cur_order:
+            if cur_order:
+                st.query_params.update(stage=cur_stage, order_id=cur_order)
+            else:
+                st.query_params.update(stage=cur_stage)
+    except Exception:
+        # URL 同步失败时静默忽略，不影响主流程
+        pass
 
 
 # ══════════════════════════════════════════════════════════════════════════════
