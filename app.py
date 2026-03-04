@@ -1275,7 +1275,7 @@ elif st.session_state.stage == "generating_preview":
             '<div style="font-size:1.6rem;font-weight:600;color:#1d1d1f;'
             'letter-spacing:-0.02em;margin-bottom:0.25rem">AI 正在提取骨骼框架…</div>'
             '<p style="color:#6e6e73;font-size:0.88rem;margin-bottom:1.2rem">'
-            '骨骼识别 · 关键点标注 · 生成预览视频，请稍候（点击右上角三个点，选择「浮窗」即可保持当前页面）</p>',
+            '骨骼识别 · 关键点标注 · 生成预览视频，请稍候（点击检测后，请勿重复点击，GPU冷启动中）</p>',
             unsafe_allow_html=True,
         )
         st.markdown('</div>', unsafe_allow_html=True)
