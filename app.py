@@ -1016,7 +1016,7 @@ def _render_steps():
 # Hero 顶部品牌区（所有阶段共用）
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
-<div class="animate-in" style="text-align:center;padding:3rem 0 1.6rem">
+<div class="animate-in" style="text-align:center;padding:3rem 0 0.6rem">
   <div style="font-size:3rem;font-weight:700;letter-spacing:-0.045em;
               color:#1d1d1f;line-height:1.05">
     Ski Pro AI
@@ -1034,19 +1034,20 @@ st.markdown("""
 
 _render_steps()
 
-# 首页 Hero 中央示例图卡片（展示骨骼视频 + 报告范例）
+# Hero 品牌区下方：示例图（优先使用 GitHub raw 链接，失败则本地或占位）
+# 请将 YOUR_USERNAME / YOUR_REPO / main / 路径 替换为你的仓库与分支、图片路径
+hero_demo_url = (
+    "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/assets/hero_demo_example.jpg"
+)
 _hero_demo_candidates = [
-    # 本地示例图（优先使用 assets 目录）
+    hero_demo_url,
     Path(__file__).parent / "assets" / "hero_demo_example.jpg",
     Path(__file__).parent / "hero_demo_example.jpg",
-    # 也可以在这里追加一个 GitHub 图片 URL，例如：
-    # "https://github.com/your/repo/blob/main/path/to/hero_demo.png",
 ]
 
 
 def _normalize_hero_demo_source(candidate):
     """将本地路径或 GitHub 链接转换为可用的图片地址，并内置网络失败回退。"""
-    # 本地文件：存在则直接使用
     if isinstance(candidate, Path):
         return str(candidate) if candidate.exists() else None
 
@@ -1054,11 +1055,9 @@ def _normalize_hero_demo_source(candidate):
     if not url:
         return None
 
-    # GitHub 普通链接（含 /blob/）：自动转换为 raw.githubusercontent.com 原始图片链接
     if "github.com" in url and "/blob/" in url:
         url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
 
-    # 远程链接：先尝试请求，失败则返回 None，由上层触发占位提示
     if url.startswith(("http://", "https://")):
         try:
             resp = requests.get(url, timeout=5)
@@ -1071,6 +1070,26 @@ def _normalize_hero_demo_source(candidate):
     return url
 
 
+_hero_demo_src = None
+for _c in _hero_demo_candidates:
+    _hero_demo_src = _normalize_hero_demo_source(_c)
+    if _hero_demo_src:
+        break
+
+if _hero_demo_src:
+    st.markdown(
+        '<div class="apple-card animate-in" style="max-width:960px;margin:0 auto 1.2rem;padding:0;overflow:hidden;text-align:center">',
+        unsafe_allow_html=True,
+    )
+    st.image(_hero_demo_src, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+else:
+    st.markdown(
+        '<div class="apple-card animate-in" style="max-width:960px;margin:0 auto 1.2rem;padding:1.2rem;text-align:center">',
+        unsafe_allow_html=True,
+    )
+    st.write("示例图片暂时无法加载，请稍后重试。")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Z-Pay GET 回调捕获（notify_url 与 return_url 均指向本页）
@@ -1266,10 +1285,14 @@ elif st.session_state.stage == "upload":
                 time.sleep(0.1)
 
     if start_btn and not st.session_state.processing:
+        # 点击后立即锁定，防止重复点击；仅校验不通过时再解锁以便用户修正后重试
+        st.session_state.processing = True
         if not uploaded:
             st.warning("请先上传滑雪视频！")
+            st.session_state.processing = False
         elif not user_name.strip():
             st.warning("请填写您的昵称！")
+            st.session_state.processing = False
         else:
             # 读取视频并做时长限制校验
             video_bytes = uploaded.read()
@@ -1279,12 +1302,12 @@ elif st.session_state.stage == "upload":
                     f"视频时长约为 {duration_sec:.1f} 秒，已超过 {MAX_VIDEO_DURATION_SEC} 秒上限。"
                     "请截取 15 秒以内的精彩片段重新上传，以保证分析速度和稳定性。"
                 )
+                st.session_state.processing = False
             else:
                 st.session_state.user_name      = user_name.strip()
                 st.session_state.video_filename = uploaded.name
                 st.session_state.video_bytes    = video_bytes
                 st.session_state.start_clicked  = True
-                st.session_state.processing     = True
                 st.session_state.stage          = "generating_preview"
                 st.rerun()
 
