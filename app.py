@@ -271,19 +271,27 @@ def call_modal_submit(video_bytes: bytes, filename: str) -> dict:
     return resp.json()
 
 
+def get_modal_status_once(base_url: str, job_id: str) -> dict:
+    """
+    单次请求 GET base_url + "/status/" + job_id，返回状态 JSON。
+    进行中时含 progress_pct、stage；完成时含 status "done" 及完整 files 等。
+    """
+    url = f"{base_url.rstrip('/')}/status/{job_id}"
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    return resp.json() or {}
+
+
 def poll_modal_status(base_url: str, job_id: str, interval_sec: float = 2.0, timeout_sec: float = 1200) -> dict:
     """
     轮询 GET base_url + "/status/" + job_id，直到 status 为 "done" 或 "error"。
     返回最后一次响应的完整 JSON（即 meta，含 files 等）。
     """
-    url = f"{base_url.rstrip('/')}/status/{job_id}"
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
-        resp = requests.get(url, timeout=60)
-        resp.raise_for_status()
-        meta = resp.json()
+        meta = get_modal_status_once(base_url, job_id)
         status = (meta or {}).get("status")
-        if status == "done":
+        if status in ("done", "completed"):
             return meta
         if status == "error":
             return meta
@@ -1231,10 +1239,15 @@ elif st.session_state.stage == "upload":
         )
 
     if start_btn and not st.session_state.start_clicked:
+        # 点击后立即锁定按钮，只允许点击一次，防止重复提交
+        st.session_state.start_clicked = True
+
         if not uploaded:
             st.warning("请先上传滑雪视频！")
+            st.session_state.start_clicked = False  # 未通过校验，允许修正后重试
         elif not user_name.strip():
             st.warning("请填写您的昵称！")
+            st.session_state.start_clicked = False
         else:
             # 读取视频并做时长限制校验
             video_bytes = uploaded.read()
@@ -1244,11 +1257,12 @@ elif st.session_state.stage == "upload":
                     f"视频时长约为 {duration_sec:.1f} 秒，已超过 {MAX_VIDEO_DURATION_SEC} 秒上限。"
                     "请截取 15 秒以内的精彩片段重新上传，以保证分析速度和稳定性。"
                 )
+                st.session_state.start_clicked = False
             else:
+                # 校验通过，保持 start_clicked=True，跳转分析页，不允许再次点击
                 st.session_state.user_name      = user_name.strip()
                 st.session_state.video_filename = uploaded.name
                 st.session_state.video_bytes    = video_bytes
-                st.session_state.start_clicked  = True
                 st.session_state.stage          = "generating_preview"
                 st.rerun()
 
@@ -1309,12 +1323,35 @@ elif st.session_state.stage == "generating_preview":
 
         st.session_state["job_id"] = job_id
 
-        # 第二步：轮询 GET /status/{job_id}，直到 status 为 done 或 error（纯 HTTP，不用 Modal SDK）
+        # 第二步：轮询 /status/{job_id}，用返回的百分比更新进度条，完成后再取最终结果
+        base_url = _get_modal_base_url()
+        result = None
+        deadline = time.time() + 1200
         try:
-            progress_bar.progress(40, text="GPU 正在全力分析中…")
-            with st.spinner("GPU 正在全力分析中，请勿关闭页面..."):
-                base_url = _get_modal_base_url()
-                result = poll_modal_status(base_url, job_id, interval_sec=2.0, timeout_sec=1200)
+            while time.time() < deadline:
+                meta = get_modal_status_once(base_url, job_id)
+                status = (meta or {}).get("status")
+                pct = (meta or {}).get("progress_pct", 0)
+                stage = (meta or {}).get("stage", "分析中…")
+                progress_bar.progress(min(100, max(0, pct)) / 100.0, text=stage)
+                status_text.markdown(
+                    f'<p style="color:#6e6e73;font-size:0.88rem">{stage}</p>',
+                    unsafe_allow_html=True,
+                )
+                if status in ("done", "completed"):
+                    result = meta
+                    break
+                if status == "error":
+                    st.error(meta.get("error", "分析失败"))
+                    if st.button("重新上传"):
+                        for k in ["stage", "preview_done", "analysis_done", "start_clicked",
+                                  "video_bytes", "video_filename", "modal_result", "job_id"]:
+                            st.session_state.pop(k, None)
+                        st.rerun()
+                    st.stop()
+                time.sleep(1.5)
+            if result is None:
+                raise TimeoutError("轮询超时（20 分钟）未得到完成状态")
         except Exception as e:
             st.error(f"云端分析轮询失败：{e}")
             st.info("请稍后重试，或联系客服。")
@@ -1341,7 +1378,7 @@ elif st.session_state.stage == "generating_preview":
                     st.session_state.pop(k, None)
                 st.rerun()
             st.stop()
-        if result.get("status") != "done":
+        if result.get("status") not in ("done", "completed"):
             st.error("分析未完成，请稍后重试。")
             st.stop()
 
