@@ -1227,29 +1227,28 @@ elif st.session_state.stage == "upload":
     st.markdown("<br>", unsafe_allow_html=True)
     btn_col, _ = st.columns([1, 2])
 
-    # 防抖：同一页面生命周期内“开始免费检测”只触发一次，避免用户连点导致后台重复排队
     if "start_clicked" not in st.session_state:
         st.session_state.start_clicked = False
 
-    with btn_col:
-        start_btn = st.button(
-            "开始免费检测  →",
-            use_container_width=True,
-            disabled=st.session_state.start_clicked,
-        )
+    # 点击后按钮消失：仅当未点击时显示按钮，点击后本轮 rerun 后只显示“正在提交…”
+    if not st.session_state.start_clicked:
+        with btn_col:
+            start_btn = st.button(
+                "开始免费检测  →",
+                use_container_width=True,
+            )
+    else:
+        start_btn = False
+        with btn_col:
+            st.caption("正在提交…")
 
     if start_btn and not st.session_state.start_clicked:
-        # 点击后立即锁定按钮，只允许点击一次，防止重复提交
-        st.session_state.start_clicked = True
-
+        # 先做校验；通过则保存数据、标记已点击并立即 rerun，使按钮在下一轮消失
         if not uploaded:
             st.warning("请先上传滑雪视频！")
-            st.session_state.start_clicked = False  # 未通过校验，允许修正后重试
         elif not user_name.strip():
             st.warning("请填写您的昵称！")
-            st.session_state.start_clicked = False
         else:
-            # 读取视频并做时长限制校验
             video_bytes = uploaded.read()
             duration_sec = _get_video_duration_seconds(video_bytes)
             if duration_sec is not None and duration_sec > MAX_VIDEO_DURATION_SEC:
@@ -1257,14 +1256,17 @@ elif st.session_state.stage == "upload":
                     f"视频时长约为 {duration_sec:.1f} 秒，已超过 {MAX_VIDEO_DURATION_SEC} 秒上限。"
                     "请截取 15 秒以内的精彩片段重新上传，以保证分析速度和稳定性。"
                 )
-                st.session_state.start_clicked = False
             else:
-                # 校验通过，保持 start_clicked=True，跳转分析页，不允许再次点击
                 st.session_state.user_name      = user_name.strip()
                 st.session_state.video_filename = uploaded.name
                 st.session_state.video_bytes    = video_bytes
-                st.session_state.stage          = "generating_preview"
-                st.rerun()
+                st.session_state.start_clicked  = True
+                st.rerun()  # 立即 rerun，下一轮不再显示按钮
+
+    # 已点击且数据已保存：从上传页跳转到分析页（按钮已消失，本 run 只做跳转）
+    if st.session_state.start_clicked and st.session_state.get("video_bytes"):
+        st.session_state.stage = "generating_preview"
+        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
