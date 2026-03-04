@@ -1071,32 +1071,6 @@ def _normalize_hero_demo_source(candidate):
     return url
 
 
-_hero_demo_src = None
-for _c in _hero_demo_candidates:
-    _hero_demo_src = _normalize_hero_demo_source(_c)
-    if _hero_demo_src:
-        break
-
-if _hero_demo_src:
-    st.markdown(
-        '<div class="apple-card animate-in" '
-        'style="max-width:960px;margin:0 auto 1.8rem;padding:0;overflow:hidden">',
-        unsafe_allow_html=True,
-    )
-    # use_container_width=True 让图片与卡片宽度同步，自适应桌面与手机
-    st.image(_hero_demo_src, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-else:
-    # 回退机制：网络失败或本地文件缺失时，展示友好的文字提示而不是空白或报错
-    st.markdown(
-        '<div class="apple-card animate-in" '
-        'style="max-width:960px;margin:0 auto 1.8rem;'
-        'padding:1.4rem;text-align:center;">',
-        unsafe_allow_html=True,
-    )
-    st.write("示例图片暂时无法加载，请稍后重试。")
-    st.markdown("</div>", unsafe_allow_html=True)
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Z-Pay GET 回调捕获（notify_url 与 return_url 均指向本页）
