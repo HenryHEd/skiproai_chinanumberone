@@ -1225,42 +1225,95 @@ elif st.session_state.stage == "upload":
 """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    btn_col, _ = st.columns([1, 2])
 
+    # 动态占位：先显示按钮，点击后同页切换为进度条并开始轮询
     if "start_clicked" not in st.session_state:
         st.session_state.start_clicked = False
 
-    # 未点击时显示按钮；点击且校验通过后直接跳转分析页，按钮因离开本页而消失
-    with btn_col:
-        if not st.session_state.start_clicked:
-            start_btn = st.button(
-                "开始免费检测  →",
-                use_container_width=True,
-            )
-        else:
-            start_btn = False
-            st.caption("正在提交…")
+    ui_placeholder = st.empty()
 
-    if start_btn and not st.session_state.start_clicked:
-        if not uploaded:
-            st.warning("请先上传滑雪视频！")
-        elif not user_name.strip():
-            st.warning("请填写您的昵称！")
-        else:
-            video_bytes = uploaded.read()
-            duration_sec = _get_video_duration_seconds(video_bytes)
-            if duration_sec is not None and duration_sec > MAX_VIDEO_DURATION_SEC:
-                st.error(
-                    f"视频时长约为 {duration_sec:.1f} 秒，已超过 {MAX_VIDEO_DURATION_SEC} 秒上限。"
-                    "请截取 15 秒以内的精彩片段重新上传，以保证分析速度和稳定性。"
-                )
-            else:
-                st.session_state.user_name      = user_name.strip()
-                st.session_state.video_filename = uploaded.name
-                st.session_state.video_bytes    = video_bytes
-                st.session_state.start_clicked  = True
-                st.session_state.stage          = "generating_preview"
-                st.rerun()  # 一次 rerun 即进入分析页，上传页不再渲染，按钮自然消失
+    if not st.session_state.start_clicked:
+        with ui_placeholder.container():
+            btn_col, _ = st.columns([1, 2])
+            if btn_col.button("开始免费检测  →", use_container_width=True):
+                if not uploaded:
+                    st.warning("请先上传滑雪视频！")
+                elif not user_name.strip():
+                    st.warning("请填写您的昵称！")
+                else:
+                    video_bytes = uploaded.read()
+                    duration_sec = _get_video_duration_seconds(video_bytes)
+                    if duration_sec is not None and duration_sec > MAX_VIDEO_DURATION_SEC:
+                        st.error(
+                            f"视频时长约为 {duration_sec:.1f} 秒，已超过 {MAX_VIDEO_DURATION_SEC} 秒上限。"
+                            "请截取 15 秒以内的精彩片段重新上传，以保证分析速度和稳定性。"
+                        )
+                    else:
+                        st.session_state.user_name      = user_name.strip()
+                        st.session_state.video_filename  = uploaded.name
+                        st.session_state.video_bytes     = video_bytes
+                        st.session_state.start_clicked   = True
+                        st.rerun()
+
+    else:
+        with ui_placeholder.container():
+            st.info("🚀 任务已提交，正在激活云端 GPU 并分析视频...")
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            try:
+                if st.session_state.get("video_bytes"):
+                    submit_res = call_modal_submit(
+                        st.session_state.video_bytes,
+                        st.session_state.get("video_filename") or "video.mp4",
+                    )
+                    job_id = submit_res.get("job_id")
+                    if not job_id:
+                        st.error("云端未返回 job_id，请重试。")
+                        st.session_state.start_clicked = False
+                        st.rerun()
+                    else:
+                        st.session_state["job_id"] = job_id
+                        base_url = _get_modal_base_url()
+                        completed = False
+                        while not completed:
+                            status_res = get_modal_status_once(base_url, job_id)
+                            state = status_res.get("status")
+                            progress = status_res.get("progress_pct", status_res.get("progress", 0))
+                            progress_bar.progress(min(100, max(0, progress)) / 100.0)
+                            status_text.text(f"AI 正在全力分析中: {min(100, max(0, int(progress)))}% (每20帧同步一次)")
+
+                            if state in ("done", "completed"):
+                                status_text.text("分析完成！准备生成报告...")
+                                st.session_state.modal_result   = status_res
+                                st.session_state.analysis_done  = True
+                                st.session_state.preview_done   = True
+                                completed = True
+                            elif state == "error":
+                                st.error(status_res.get("error", "分析过程中出现错误，请检查视频格式。"))
+                                break
+
+                            time.sleep(1.5)
+
+                        if st.session_state.analysis_done:
+                            res_files = (st.session_state.get("modal_result") or {}).get("files", {}) or {}
+                            if "skeleton_video_mp4" not in res_files and "comparison_video_mp4" not in res_files:
+                                st.warning("云端分析已完成，但结果中未包含骨骼视频，请重试或联系客服。")
+                            else:
+                                st.balloons()
+                                st.success("✅ 检测报告已就绪，请查看下方详情")
+                                st.session_state.stage = "preview"
+                                st.rerun()
+                else:
+                    st.error("未检测到上传的视频，请重新上传。")
+                    st.session_state.start_clicked = False
+                    st.rerun()
+            except Exception as e:
+                st.error(f"连接服务器失败: {str(e)}")
+                if st.button("重置并重试"):
+                    for k in ["start_clicked", "job_id"]:
+                        st.session_state.pop(k, None)
+                    st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
