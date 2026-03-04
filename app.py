@@ -1230,20 +1230,18 @@ elif st.session_state.stage == "upload":
     if "start_clicked" not in st.session_state:
         st.session_state.start_clicked = False
 
-    # 点击后按钮消失：仅当未点击时显示按钮，点击后本轮 rerun 后只显示“正在提交…”
-    if not st.session_state.start_clicked:
-        with btn_col:
+    # 未点击时显示按钮；点击且校验通过后直接跳转分析页，按钮因离开本页而消失
+    with btn_col:
+        if not st.session_state.start_clicked:
             start_btn = st.button(
                 "开始免费检测  →",
                 use_container_width=True,
             )
-    else:
-        start_btn = False
-        with btn_col:
+        else:
+            start_btn = False
             st.caption("正在提交…")
 
     if start_btn and not st.session_state.start_clicked:
-        # 先做校验；通过则保存数据、标记已点击并立即 rerun，使按钮在下一轮消失
         if not uploaded:
             st.warning("请先上传滑雪视频！")
         elif not user_name.strip():
@@ -1261,12 +1259,8 @@ elif st.session_state.stage == "upload":
                 st.session_state.video_filename = uploaded.name
                 st.session_state.video_bytes    = video_bytes
                 st.session_state.start_clicked  = True
-                st.rerun()  # 立即 rerun，下一轮不再显示按钮
-
-    # 已点击且数据已保存：从上传页跳转到分析页（按钮已消失，本 run 只做跳转）
-    if st.session_state.start_clicked and st.session_state.get("video_bytes"):
-        st.session_state.stage = "generating_preview"
-        st.rerun()
+                st.session_state.stage          = "generating_preview"
+                st.rerun()  # 一次 rerun 即进入分析页，上传页不再渲染，按钮自然消失
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
