@@ -770,6 +770,23 @@ _order_q = _qp_url.get("order_id")
 if _order_q:
     st.session_state.order_id = _order_q
 
+# 若 URL 中带有 job_id，则尝试恢复任务结果（刷新后仍可查看视频与报告）
+_job_q = _qp_url.get("job_id")
+if _job_q:
+    st.session_state["job_id"] = _job_q
+    if "modal_result" not in st.session_state:
+        try:
+            base = _get_modal_base_url()
+            if base:
+                _meta = get_modal_status_once(base, _job_q)
+                if _meta and _meta.get("status") in ("done", "completed"):
+                    st.session_state["modal_result"] = _meta
+                    st.session_state["preview_done"] = True
+                    st.session_state["analysis_done"] = True
+        except Exception:
+            # 恢复失败时静默忽略，避免影响正常流程
+            pass
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 工具函数
@@ -2007,12 +2024,19 @@ elif st.session_state.stage == "final":
     try:
         cur_stage = st.session_state.get("stage", "pay_first")
         cur_order = st.session_state.get("order_id") or ""
+        cur_job   = st.session_state.get("job_id") or ""
         qp = st.query_params
-        if qp.get("stage") != cur_stage or qp.get("order_id", "") != cur_order:
+        if (
+            qp.get("stage") != cur_stage
+            or qp.get("order_id", "") != cur_order
+            or qp.get("job_id", "") != cur_job
+        ):
+            params = {"stage": cur_stage}
             if cur_order:
-                st.query_params.update(stage=cur_stage, order_id=cur_order)
-            else:
-                st.query_params.update(stage=cur_stage)
+                params["order_id"] = cur_order
+            if cur_job:
+                params["job_id"] = cur_job
+            st.query_params.update(**params)
     except Exception:
         # URL 同步失败时静默忽略，不影响主流程
         pass
