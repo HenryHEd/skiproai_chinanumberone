@@ -271,17 +271,25 @@ def call_modal_submit(video_bytes: bytes, filename: str) -> dict:
     return resp.json()
 
 
+def get_modal_status_once(base_url: str, job_id: str) -> dict:
+    """
+    单次请求 GET base_url + "/status/" + job_id，返回状态 JSON。
+    含 progress_pct、stage（进行中）或完整 meta（done/error）。
+    """
+    url = f"{base_url.rstrip('/')}/status/{job_id}"
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    return resp.json() or {}
+
+
 def poll_modal_status(base_url: str, job_id: str, interval_sec: float = 2.0, timeout_sec: float = 1200) -> dict:
     """
     轮询 GET base_url + "/status/" + job_id，直到 status 为 "done" 或 "error"。
     返回最后一次响应的完整 JSON（即 meta，含 files 等）。
     """
-    url = f"{base_url.rstrip('/')}/status/{job_id}"
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
-        resp = requests.get(url, timeout=60)
-        resp.raise_for_status()
-        meta = resp.json()
+        meta = get_modal_status_once(base_url, job_id)
         status = (meta or {}).get("status")
         if status == "done":
             return meta
@@ -743,6 +751,8 @@ def _init_state():
         "pay_type":         "wxpay",
         "preview_done":     False,   # 基础骨骼视频已生成
         "analysis_done":    False,   # 深度分析已完成
+        "start_clicked":    False,   # 旧版防抖标记，保留兼容
+        "processing":       False,   # 上传后到分析结束之间的锁定状态
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -1026,15 +1036,65 @@ _render_steps()
 
 # 首页 Hero 中央示例图卡片（展示骨骼视频 + 报告范例）
 _hero_demo_candidates = [
-    Path(__file__).parent / "assets:hero_demo_example.jpg",
+    # 本地示例图（优先使用 assets 目录）
+    Path(__file__).parent / "assets" / "hero_demo_example.jpg",
     Path(__file__).parent / "hero_demo_example.jpg",
+    # 也可以在这里追加一个 GitHub 图片 URL，例如：
+    # "https://github.com/your/repo/blob/main/path/to/hero_demo.png",
 ]
-_hero_demo_path = next((p for p in _hero_demo_candidates if p.exists()), None)
-if _hero_demo_path is not None:
-    st.markdown('<div class="apple-card animate-in" '
-                'style="max-width:960px;margin:0 auto 1.8rem;padding:0;overflow:hidden">',
-                unsafe_allow_html=True)
-    st.image(str(_hero_demo_path), use_column_width=True)
+
+
+def _normalize_hero_demo_source(candidate):
+    """将本地路径或 GitHub 链接转换为可用的图片地址，并内置网络失败回退。"""
+    # 本地文件：存在则直接使用
+    if isinstance(candidate, Path):
+        return str(candidate) if candidate.exists() else None
+
+    url = str(candidate).strip()
+    if not url:
+        return None
+
+    # GitHub 普通链接（含 /blob/）：自动转换为 raw.githubusercontent.com 原始图片链接
+    if "github.com" in url and "/blob/" in url:
+        url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+
+    # 远程链接：先尝试请求，失败则返回 None，由上层触发占位提示
+    if url.startswith(("http://", "https://")):
+        try:
+            resp = requests.get(url, timeout=5)
+            if resp.ok:
+                return url
+            return None
+        except Exception:
+            return None
+
+    return url
+
+
+_hero_demo_src = None
+for _c in _hero_demo_candidates:
+    _hero_demo_src = _normalize_hero_demo_source(_c)
+    if _hero_demo_src:
+        break
+
+if _hero_demo_src:
+    st.markdown(
+        '<div class="apple-card animate-in" '
+        'style="max-width:960px;margin:0 auto 1.8rem;padding:0;overflow:hidden">',
+        unsafe_allow_html=True,
+    )
+    # use_container_width=True 让图片与卡片宽度同步，自适应桌面与手机
+    st.image(_hero_demo_src, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+else:
+    # 回退机制：网络失败或本地文件缺失时，展示友好的文字提示而不是空白或报错
+    st.markdown(
+        '<div class="apple-card animate-in" '
+        'style="max-width:960px;margin:0 auto 1.8rem;'
+        'padding:1.4rem;text-align:center;">',
+        unsafe_allow_html=True,
+    )
+    st.write("示例图片暂时无法加载，请稍后重试。")
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -1219,18 +1279,19 @@ elif st.session_state.stage == "upload":
     st.markdown("<br>", unsafe_allow_html=True)
     btn_col, _ = st.columns([1, 2])
 
-    # 防抖：同一页面生命周期内“开始免费检测”只触发一次，避免用户连点导致后台重复排队
-    if "start_clicked" not in st.session_state:
-        st.session_state.start_clicked = False
-
     with btn_col:
         start_btn = st.button(
             "开始免费检测  →",
             use_container_width=True,
-            disabled=st.session_state.start_clicked,
+            disabled=st.session_state.processing,
         )
 
-    if start_btn and not st.session_state.start_clicked:
+        # 当 processing 为 True 时，在按钮下方给出明显的加载提示，防止用户误以为没有响应
+        if st.session_state.processing:
+            with st.spinner("正在努力分析中，请勿重复点击..."):
+                time.sleep(0.1)
+
+    if start_btn and not st.session_state.processing:
         if not uploaded:
             st.warning("请先上传滑雪视频！")
         elif not user_name.strip():
@@ -1249,6 +1310,7 @@ elif st.session_state.stage == "upload":
                 st.session_state.video_filename = uploaded.name
                 st.session_state.video_bytes    = video_bytes
                 st.session_state.start_clicked  = True
+                st.session_state.processing     = True
                 st.session_state.stage          = "generating_preview"
                 st.rerun()
 
@@ -1265,7 +1327,7 @@ elif st.session_state.stage == "generating_preview":
             '<div style="font-size:1.6rem;font-weight:600;color:#1d1d1f;'
             'letter-spacing:-0.02em;margin-bottom:0.25rem">AI 正在提取骨骼框架…</div>'
             '<p style="color:#6e6e73;font-size:0.88rem;margin-bottom:1.2rem">'
-            '骨骼识别 · 关键点标注 · 生成预览视频，请稍候（点击右上角三个点，选择「浮窗」即可保持当前页面）</p>',
+            '骨骼识别 · 关键点标注 · 生成预览视频，请稍候</p>',
             unsafe_allow_html=True,
         )
         st.markdown('</div>', unsafe_allow_html=True)
@@ -1275,96 +1337,126 @@ elif st.session_state.stage == "generating_preview":
         status_text  = st.empty()
 
     if not st.session_state.preview_done:
-        progress_bar.progress(15, text="正在连接 Modal 云端…")
-        status_text.markdown(
-            '<p style="color:#6e6e73;font-size:0.88rem">GPU 正在全力分析中，请勿关闭页面…</p>',
-            unsafe_allow_html=True,
-        )
+        # 进入分析阶段后立即加锁，保证整个云端分析流程期间无法重复点击
+        st.session_state.processing = True
 
-        # 第一步：POST /analyze 上传视频，获取 job_id
         try:
-            submit_resp = _call_modal_analyze(
-                st.session_state.video_bytes,
-                st.session_state.get("video_filename") or "video.mp4",
+            progress_bar.progress(15, text="正在连接 Modal 云端…")
+            status_text.markdown(
+                '<p style="color:#6e6e73;font-size:0.88rem">GPU 正在全力分析中，请勿关闭页面…</p>',
+                unsafe_allow_html=True,
             )
-        except Exception as e:
-            st.error(f"云端分析失败：{e}")
-            st.info("请稍后重试，或联系客服。")
-            if st.button("重新上传"):
-                for k in ["stage", "preview_done", "analysis_done", "start_clicked",
-                          "video_bytes", "video_filename", "modal_result", "job_id"]:
-                    st.session_state.pop(k, None)
-                st.rerun()
-            st.stop()
 
-        job_id = (submit_resp or {}).get("job_id")
-        if not job_id:
-            st.error(f"云端未返回 job_id，响应内容：{submit_resp}")
-            if st.button("重新上传"):
-                for k in ["stage", "preview_done", "analysis_done", "start_clicked",
-                          "video_bytes", "video_filename", "modal_result", "job_id"]:
-                    st.session_state.pop(k, None)
-                st.rerun()
-            st.stop()
+            # 第一步：POST /analyze 上传视频，获取 job_id
+            try:
+                submit_resp = _call_modal_analyze(
+                    st.session_state.video_bytes,
+                    st.session_state.get("video_filename") or "video.mp4",
+                )
+            except Exception as e:
+                st.error(f"云端分析失败：{e}")
+                st.info("请稍后重试，或联系客服。")
+                if st.button("重新上传"):
+                    for k in ["stage", "preview_done", "analysis_done", "start_clicked", "processing",
+                              "video_bytes", "video_filename", "modal_result", "job_id"]:
+                        st.session_state.pop(k, None)
+                    st.rerun()
+                st.stop()
 
-        st.session_state["job_id"] = job_id
+            job_id = (submit_resp or {}).get("job_id")
+            if not job_id:
+                st.error(f"云端未返回 job_id，响应内容：{submit_resp}")
+                if st.button("重新上传"):
+                    for k in ["stage", "preview_done", "analysis_done", "start_clicked", "processing",
+                              "video_bytes", "video_filename", "modal_result", "job_id"]:
+                        st.session_state.pop(k, None)
+                    st.rerun()
+                st.stop()
 
-        # 第二步：轮询 GET /status/{job_id}，直到 status 为 done 或 error（纯 HTTP，不用 Modal SDK）
-        try:
-            progress_bar.progress(40, text="GPU 正在全力分析中…")
-            with st.spinner("GPU 正在全力分析中，请勿关闭页面..."):
-                base_url = _get_modal_base_url()
-                result = poll_modal_status(base_url, job_id, interval_sec=2.0, timeout_sec=1200)
-        except Exception as e:
-            st.error(f"云端分析轮询失败：{e}")
-            st.info("请稍后重试，或联系客服。")
-            if st.button("重新上传"):
-                for k in ["stage", "preview_done", "analysis_done", "start_clicked",
-                          "video_bytes", "video_filename", "modal_result", "job_id"]:
-                    st.session_state.pop(k, None)
-                st.rerun()
-            st.stop()
+            st.session_state["job_id"] = job_id
 
-        # 调试：在任何 Base64/URL 解码前先打印后端返回的文件键名
-        try:
-            res_files = (result or {}).get("files", {}) or {}
-        except Exception:
-            res_files = {}
-        print(f"[modal] res_files.keys(): {list(res_files.keys())}")
+            # 第二步：轮询 GET /status/{job_id}，按返回的 progress_pct 更新进度条，完成后再取结果
+            base_url = _get_modal_base_url()
+            result = None
+            deadline = time.time() + 1200
+            try:
+                while time.time() < deadline:
+                    meta = get_modal_status_once(base_url, job_id)
+                    status = (meta or {}).get("status")
+                    pct = (meta or {}).get("progress_pct", 0)
+                    stage = (meta or {}).get("stage", "分析中…")
+                    progress_bar.progress(min(100, max(0, pct)) / 100.0, text=stage)
+                    status_text.markdown(
+                        f'<p style="color:#6e6e73;font-size:0.88rem">{stage}</p>',
+                        unsafe_allow_html=True,
+                    )
+                    if status == "done":
+                        result = meta
+                        break
+                    if status == "error":
+                        st.error(meta.get("error", "分析失败"))
+                        if st.button("重新上传"):
+                            for k in ["stage", "preview_done", "analysis_done", "start_clicked", "processing",
+                                      "video_bytes", "video_filename", "modal_result", "job_id"]:
+                                st.session_state.pop(k, None)
+                            st.rerun()
+                        st.stop()
+                    time.sleep(1.5)
+                if result is None:
+                    raise TimeoutError("轮询超时（20 分钟）未得到完成状态")
+            except Exception as e:
+                st.error(f"云端分析轮询失败：{e}")
+                st.info("请稍后重试，或联系客服。")
+                if st.button("重新上传"):
+                    for k in ["stage", "preview_done", "analysis_done", "start_clicked", "processing",
+                              "video_bytes", "video_filename", "modal_result", "job_id"]:
+                        st.session_state.pop(k, None)
+                    st.rerun()
+                st.stop()
 
-        st.session_state["modal_result"] = result or {}
-        if result.get("status") == "error":
-            st.error(result.get("error", "分析失败"))
-            if st.button("重新上传"):
-                for k in ["stage", "preview_done", "analysis_done", "start_clicked",
-                          "video_bytes", "video_filename", "modal_result", "job_id"]:
-                    st.session_state.pop(k, None)
-                st.rerun()
-            st.stop()
-        if result.get("status") != "done":
-            st.error("分析未完成，请稍后重试。")
-            st.stop()
+            # 调试：在任何 Base64/URL 解码前先打印后端返回的文件键名
+            try:
+                res_files = (result or {}).get("files", {}) or {}
+            except Exception:
+                res_files = {}
+            print(f"[modal] res_files.keys(): {list(res_files.keys())}")
 
-        # 若云端结果中未包含任何骨骼视频相关 key，则直接在生成阶段报错，避免后续空白预览。
-        if "skeleton_video_mp4" not in res_files and "comparison_video_mp4" not in res_files:
-            st.error(
-                "云端分析已完成，但结果中未包含骨骼视频文件。"
-                "请稍后重试，如多次出现请联系开发者排查后端。"
+            st.session_state["modal_result"] = result or {}
+            if result.get("status") == "error":
+                st.error(result.get("error", "分析失败"))
+                if st.button("重新上传"):
+                    for k in ["stage", "preview_done", "analysis_done", "start_clicked", "processing",
+                              "video_bytes", "video_filename", "modal_result", "job_id"]:
+                        st.session_state.pop(k, None)
+                    st.rerun()
+                st.stop()
+            if result.get("status") != "done":
+                st.error("分析未完成，请稍后重试。")
+                st.stop()
+
+            # 若云端结果中未包含任何骨骼视频相关 key，则直接在生成阶段报错，避免后续空白预览。
+            if "skeleton_video_mp4" not in res_files and "comparison_video_mp4" not in res_files:
+                st.error(
+                    "云端分析已完成，但结果中未包含骨骼视频文件。"
+                    "请稍后重试，如多次出现请联系开发者排查后端。"
+                )
+                st.write(f"后端返回的文件键：{list(res_files.keys())}")
+                st.stop()
+
+            progress_bar.progress(100, text="云端分析完成")
+            status_text.markdown(
+                '<p style="color:#34c759;font-size:0.95rem;font-weight:600">'
+                '云端分析完成，正在跳转预览…</p>',
+                unsafe_allow_html=True,
             )
-            st.write(f"后端返回的文件键：{list(res_files.keys())}")
-            st.stop()
-
-        progress_bar.progress(100, text="云端分析完成")
-        status_text.markdown(
-            '<p style="color:#34c759;font-size:0.95rem;font-weight:600">'
-            '云端分析完成，正在跳转预览…</p>',
-            unsafe_allow_html=True,
-        )
-        st.session_state.preview_done  = True
-        st.session_state.analysis_done = True
-        time.sleep(0.8)
-        st.session_state.stage = "preview"
-        st.rerun()
+            st.session_state.preview_done  = True
+            st.session_state.analysis_done = True
+            time.sleep(0.8)
+            st.session_state.stage = "preview"
+            st.rerun()
+        finally:
+            # 不论成功或失败，都确保 processing 回落为 False，避免按钮长期被锁死
+            st.session_state.processing = False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
