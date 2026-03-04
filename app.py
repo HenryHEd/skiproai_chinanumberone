@@ -179,8 +179,8 @@ class ZPayService:
         default_cb       = "https://henryhed--ski-pro-ai-streamlit-app.modal.run/"
         self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", default_cb)
         self.return_url  = os.environ.get("ZPAY_RETURN_URL", self.notify_url)
-        self.price_yuan  = "0.01"
-        self.price_label = "¥0.01"
+        self.price_yuan  = "9.99"
+        self.price_label = "¥9.99"
         self.pay_type    = "wxpay"
         self.site_name   = "Ski Pro AI"
 
