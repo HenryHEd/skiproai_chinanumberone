@@ -35,7 +35,6 @@ os.environ.setdefault("MPLCONFIGDIR", MATPLOTLIB_CACHE_DIR)
 
 import subprocess
 import shutil
-import cv2
 import mediapipe as mp
 import numpy as np
 import pandas as pd
