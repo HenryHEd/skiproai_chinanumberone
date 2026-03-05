@@ -215,15 +215,27 @@ class ZPayService:
             pay_type = self.pay_type
         money_str = f"{float(amount):.2f}"
         # 自适应 return_url：带 stage=upload 与当前 order_id，支付后回到上传页并恢复订单
-        return_url = f"{self.app_base_url}?stage=upload&order_id={quote(order_id, safe='')}"
+        return_url_raw = f"{self.app_base_url}?stage=upload&order_id={quote(order_id, safe='')}"
+        # 签名使用原始 return_url（与 Z-Pay 解码后验签的字符串一致）
         sg = self._build_sign_str(
             money=money_str, name=name,
             notify_url=self.notify_url, out_trade_no=order_id,
-            pay_type=pay_type, return_url=return_url,
+            pay_type=pay_type, return_url=return_url_raw,
             site_name=self.site_name,
         )
         sign = hashlib.md5((sg + self.key).encode("utf-8")).hexdigest()
-        return f"{self.api_url}?{sg}&sign={sign}&sign_type=MD5"
+        # 跳转 URL 中每个参数值单独编码，避免 return_url 内的 ?、& 破坏解析
+        q = [
+            f"money={quote(money_str, safe='')}",
+            f"name={quote(name, safe='')}",
+            f"notify_url={quote(self.notify_url, safe='')}",
+            f"out_trade_no={quote(order_id, safe='')}",
+            f"pid={quote(self.pid, safe='')}",
+            f"return_url={quote(return_url_raw, safe='')}",
+            f"sitename={quote(self.site_name, safe='')}",
+            f"type={quote(pay_type, safe='')}",
+        ]
+        return f"{self.api_url}?{'&'.join(q)}&sign={sign}&sign_type=MD5"
 
     def verify_notify(self, data: dict) -> bool:
         """
