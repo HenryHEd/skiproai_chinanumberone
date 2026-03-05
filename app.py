@@ -797,6 +797,31 @@ def _make_order_id() -> str:
     return f"SKI{ts}{rand}"
 
 
+def _sync_url_from_state():
+    """
+    将当前阶段 / 订单号 / job_id 同步到 URL query，保证刷新后仍能恢复到当前页面。
+    """
+    try:
+        cur_stage = st.session_state.get("stage", "pay_first")
+        cur_order = st.session_state.get("order_id") or ""
+        cur_job   = st.session_state.get("job_id") or ""
+        qp = st.query_params
+        if (
+            qp.get("stage") != cur_stage
+            or qp.get("order_id", "") != cur_order
+            or qp.get("job_id", "") != cur_job
+        ):
+            params = {"stage": cur_stage}
+            if cur_order:
+                params["order_id"] = cur_order
+            if cur_job:
+                params["job_id"] = cur_job
+            st.query_params.update(**params)
+    except Exception:
+        # URL 同步失败时静默忽略，不影响主流程
+        pass
+
+
 def _mark_paid_local(order_id: str, trade_no: str = "", money: str = "") -> None:
     """将支付结果写入本地 payment_status.json（主动查单成功后调用）。"""
     try:
@@ -2022,28 +2047,6 @@ elif st.session_state.stage == "final":
         unsafe_allow_html=True,
     )
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # 将当前阶段与订单号同步到 URL（避免刷新后回到首页）
-    # ══════════════════════════════════════════════════════════════════════════
-    try:
-        cur_stage = st.session_state.get("stage", "pay_first")
-        cur_order = st.session_state.get("order_id") or ""
-        cur_job   = st.session_state.get("job_id") or ""
-        qp = st.query_params
-        if (
-            qp.get("stage") != cur_stage
-            or qp.get("order_id", "") != cur_order
-            or qp.get("job_id", "") != cur_job
-        ):
-            params = {"stage": cur_stage}
-            if cur_order:
-                params["order_id"] = cur_order
-            if cur_job:
-                params["job_id"] = cur_job
-            st.query_params.update(**params)
-    except Exception:
-        # URL 同步失败时静默忽略，不影响主流程
-        pass
-
+_sync_url_from_state()
 
 # ══════════════════════════════════════════════════════════════════════════════
