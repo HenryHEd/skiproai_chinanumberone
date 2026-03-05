@@ -764,7 +764,8 @@ _init_state()
 # ═══════════════════════════════════════════════════════════════════════════════
 _qp_url = st.query_params
 _stage_q = _qp_url.get("stage")
-if _stage_q in ("pay_first", "upload", "generating_preview", "preview", "final"):
+# 仅从 URL 恢复 upload 之后的阶段；pay_first 始终作为默认起始页
+if _stage_q in ("upload", "generating_preview", "preview", "final"):
     st.session_state.stage = _stage_q
 _order_q = _qp_url.get("order_id")
 if _order_q:
@@ -806,17 +807,23 @@ def _sync_url_from_state():
         cur_order = st.session_state.get("order_id") or ""
         cur_job   = st.session_state.get("job_id") or ""
         qp = st.query_params
-        if (
-            qp.get("stage") != cur_stage
-            or qp.get("order_id", "") != cur_order
-            or qp.get("job_id", "") != cur_job
-        ):
-            params = {"stage": cur_stage}
-            if cur_order:
-                params["order_id"] = cur_order
-            if cur_job:
-                params["job_id"] = cur_job
-            st.query_params.update(**params)
+
+        params = {}
+        # 仅在 upload 及其之后的阶段写入 stage 参数；pay_first 不写 stage
+        if cur_stage in ("upload", "generating_preview", "preview", "final"):
+            params["stage"] = cur_stage
+        if cur_order:
+            params["order_id"] = cur_order
+        if cur_job:
+            params["job_id"] = cur_job
+
+        if params:
+            if (
+                qp.get("stage") != params.get("stage")
+                or qp.get("order_id", "") != params.get("order_id", "")
+                or qp.get("job_id", "") != params.get("job_id", "")
+            ):
+                st.query_params.update(**params)
     except Exception:
         # URL 同步失败时静默忽略，不影响主流程
         pass
