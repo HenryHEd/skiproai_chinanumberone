@@ -1707,6 +1707,7 @@ elif st.session_state.stage == "preview":
         )
         if view_report_btn:
             st.session_state.stage = "final"
+            _sync_url_from_state()  # 先同步 URL，避免 rerun 后顶部用 URL 的 stage 覆盖回 preview
             st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -1786,6 +1787,7 @@ elif st.session_state.stage == "paying":
                     st.session_state.stage = "final"
                 else:
                     st.session_state.stage = "upload"
+                _sync_url_from_state()
                 st.rerun()
             else:
                 st.warning("暂未收到支付确认，请稍等几秒后再试。")
@@ -1798,6 +1800,7 @@ elif st.session_state.stage == "paying":
             st.session_state.stage = "final"
         else:
             st.session_state.stage = "upload"
+        _sync_url_from_state()
         st.rerun()
     else:
         # 等待 4 秒后自动 rerun，持续轮询，无需用户手动刷新
