@@ -174,9 +174,9 @@ class ZPayService:
         self.pid         = "2026030109230189"
         self.key         = "i9IoCmuGX8fDIXp57Ke7tgVgKEzVxzEv"
         self.api_url     = "https://zpayz.cn/submit.php"
-        # notify_url 与 return_url 默认指向最新的 Modal Streamlit 公网地址，
+        # notify_url 与 return_url 默认指向 Modal 上的 Streamlit（与 backend.py 部署一致：ski-pro-api）
         # 在生产环境中也可以通过环境变量 ZPAY_NOTIFY_URL / ZPAY_RETURN_URL 覆盖。
-        default_cb       = "https://henryhed--ski-pro-ai-streamlit-app.modal.run"
+        default_cb       = "https://henryhed--ski-pro-api-streamlit-app.modal.run"
         self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", default_cb)
         self.return_url  = os.environ.get("ZPAY_RETURN_URL", self.notify_url)
         self.price_yuan  = "9.99"
