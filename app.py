@@ -1319,7 +1319,11 @@ elif st.session_state.stage == "upload":
                             state = status_res.get("status")
                             progress = status_res.get("progress_pct", status_res.get("progress", 0))
                             progress_bar.progress(min(100, max(0, progress)) / 100.0)
-                            status_text.text(f"AI 正在全力分析中: {min(100, max(0, int(progress)))}% (每20帧同步一次)")
+                            progress_disp = min(100, max(0, int(progress)))
+                            status_text.markdown(
+                                f'<p style="color:#000000;font-size:0.9rem;">AI 正在全力分析中: {progress_disp}% (每20帧同步一次)</p>',
+                                unsafe_allow_html=True,
+                            )
 
                             if state in ("done", "completed"):
                                 status_text.text("分析完成！准备生成报告...")
