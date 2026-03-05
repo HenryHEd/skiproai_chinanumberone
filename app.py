@@ -16,7 +16,7 @@ import hashlib
 import shutil
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlencode, urlparse, parse_qs
+from urllib.parse import urlencode, urlparse, parse_qs, quote
 from datetime import datetime
 from pathlib import Path
 
@@ -174,11 +174,15 @@ class ZPayService:
         self.pid         = "2026030109230189"
         self.key         = "i9IoCmuGX8fDIXp57Ke7tgVgKEzVxzEv"
         self.api_url     = "https://zpayz.cn/submit.php"
-        # notify_url 与 return_url 默认指向 Modal 上的 Streamlit（与 backend.py 部署一致：ski-pro-api）
-        # 在生产环境中也可以通过环境变量 ZPAY_NOTIFY_URL / ZPAY_RETURN_URL 覆盖。
+        # 应用基础 URL：支付成功后跳转至此，并带 ?stage=upload&order_id=xxx（自适应每次订单）
+        # 可用环境变量 APP_BASE_URL 或 ZPAY_RETURN_BASE 覆盖
+        default_base     = "https://skiproai.streamlit.app"
+        self.app_base_url = (
+            os.environ.get("APP_BASE_URL") or os.environ.get("ZPAY_RETURN_BASE") or default_base
+        ).rstrip("/")
+        # notify_url：Z-Pay 异步回调地址（服务端），可与应用同域
         default_cb       = "https://henryhed--ski-pro-api-streamlit-app.modal.run"
         self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", default_cb)
-        self.return_url  = os.environ.get("ZPAY_RETURN_URL", self.notify_url)
         self.price_yuan  = "9.99"
         self.price_label = "¥9.99"
         self.pay_type    = "wxpay"
@@ -210,10 +214,12 @@ class ZPayService:
         if pay_type is None:
             pay_type = self.pay_type
         money_str = f"{float(amount):.2f}"
+        # 自适应 return_url：带 stage=upload 与当前 order_id，支付后回到上传页并恢复订单
+        return_url = f"{self.app_base_url}?stage=upload&order_id={quote(order_id, safe='')}"
         sg = self._build_sign_str(
             money=money_str, name=name,
             notify_url=self.notify_url, out_trade_no=order_id,
-            pay_type=pay_type, return_url=self.return_url,
+            pay_type=pay_type, return_url=return_url,
             site_name=self.site_name,
         )
         sign = hashlib.md5((sg + self.key).encode("utf-8")).hexdigest()
