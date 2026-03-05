@@ -557,6 +557,11 @@ div.stDownloadButton > button:hover {
     margin-bottom: 0.5rem;
 }
 
+/* 纠正网页端视频上下颠倒，使 HUD 实时数据从左上角正确显示（与 main.py 本地一致） */
+div[data-testid="stVideo"] video {
+    transform: scaleY(-1);
+}
+
 /* ── 输入框 ── */
 [data-testid="stTextInput"] input {
     background: rgba(255,255,255,0.8) !important;
@@ -1134,12 +1139,22 @@ if _qp.get("trade_status") == "TRADE_SUCCESS":
             # 清空 query params，防止刷新重复处理
             st.query_params.clear()
             if st.session_state.get("order_id") == _cb_order:
-                # 若已生成预览/分析完成，跳转报告页；否则为「先付后传」流程，跳转上传页
+                # 原标签页：若已生成预览/分析完成，跳转报告页；否则为「先付后传」流程，跳转上传页
                 if st.session_state.get("preview_done") or st.session_state.get("analysis_done"):
                     st.session_state.stage = "final"
                 else:
                     st.session_state.stage = "upload"
                 st.rerun()
+            else:
+                # 从收银台跳回的新标签页（新会话）：只显示提示，避免空白页
+                st.markdown(
+                    '<div style="text-align:center;padding:3rem 1.5rem;max-width:420px;margin:4rem auto;">'
+                    '<p style="font-size:1.1rem;color:#1d1d1f;margin-bottom:1.5rem;">✅ 支付成功</p>'
+                    '<p style="font-size:0.95rem;color:#6e6e73;line-height:1.6;">请关闭此页并返回原标签页继续使用。</p>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+                st.stop()
     else:
         print(f"[zpay-cb] 签名校验失败: {dict(_qp)}")
 
