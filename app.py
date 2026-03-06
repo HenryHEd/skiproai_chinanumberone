@@ -181,7 +181,7 @@ class ZPayService:
             os.environ.get("APP_BASE_URL") or os.environ.get("ZPAY_RETURN_BASE") or default_base
         ).rstrip("/")
         # notify_url：Z-Pay 异步回调地址（服务端），可与应用同域
-        default_cb       = "https://henryhed--ski-pro-ai-api-web-api.modal.run"
+        default_cb       = "https://skiproai.streamlit.app"
         self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", default_cb)
         self.price_yuan  = "0.01"
         self.price_label = "¥0.01"
