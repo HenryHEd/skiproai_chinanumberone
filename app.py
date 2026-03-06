@@ -30,7 +30,7 @@ os.environ.setdefault("MPLCONFIGDIR", _CACHE)
 # ════════════════════════════════════════════════════════════════════════════════
 MODAL_API_URL = os.environ.get(
     "MODAL_API_URL",
-    "https://henryhed--ski-pro-ai-api-web-api.modal.run",
+    "https://henryhed--ski-pro-api-web-api.modal.run",
 )
 
 import numpy as np
@@ -787,12 +787,13 @@ _order_q = _qp_url.get("order_id")
 if _order_q:
     st.session_state.order_id = _order_q
 
-# 若 URL 中带有 job_id，仅在「AI 分析」相关阶段才请求 Modal 恢复结果（避免一打开网站就调用 Modal）
+# 仅在 generating_preview 阶段请求 Modal 恢复/轮询；preview 与 final 只展示已有结果，不再调后端。
 _job_q = _qp_url.get("job_id")
 if _job_q:
     st.session_state["job_id"] = _job_q
+if _job_q and _stage_q == "generating_preview" and "modal_result" not in st.session_state:
     _cur_stage = st.session_state.get("stage", "pay_first")
-    if _cur_stage in ("generating_preview", "preview", "final") and "modal_result" not in st.session_state:
+    if _cur_stage == "generating_preview":
         try:
             base = _get_modal_base_url()
             if base:
