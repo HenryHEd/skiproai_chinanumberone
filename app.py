@@ -30,7 +30,7 @@ os.environ.setdefault("MPLCONFIGDIR", _CACHE)
 # ════════════════════════════════════════════════════════════════════════════════
 MODAL_API_URL = os.environ.get(
     "MODAL_API_URL",
-    "https://henryhed--ski-pro-api-web-api.modal.run",
+    "https://henryhed--ski-pro-api-streamlit-app.modal.run",
 )
 
 import numpy as np
