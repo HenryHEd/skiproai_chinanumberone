@@ -182,8 +182,8 @@ class ZPayService:
         ).rstrip("/")
         # notify_url：Z-Pay 异步回调地址（文档要求不支持带参数）
         self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", self.app_base_url)
-        self.price_yuan  = "0.01"
-        self.price_label = "¥0.01"
+        self.price_yuan  = "9.99"
+        self.price_label = "¥9.99"
         self.pay_type    = "wxpay"
         self.site_name   = "Ski Pro AI"
 
