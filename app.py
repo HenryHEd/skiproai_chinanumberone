@@ -183,8 +183,8 @@ class ZPayService:
         # notify_url：Z-Pay 异步回调地址（服务端），可与应用同域
         default_cb       = "https://henryhed--ski-pro-api-streamlit-app.modal.run"
         self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", default_cb)
-        self.price_yuan  = "9.99"
-        self.price_label = "¥9.99"
+        self.price_yuan  = "0.01"
+        self.price_label = "¥0.01"
         self.pay_type    = "wxpay"
         self.site_name   = "Ski Pro AI"
 
