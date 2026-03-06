@@ -787,11 +787,12 @@ _order_q = _qp_url.get("order_id")
 if _order_q:
     st.session_state.order_id = _order_q
 
-# 若 URL 中带有 job_id，则尝试恢复任务结果（刷新后仍可查看视频与报告）
+# 若 URL 中带有 job_id，仅在「AI 分析」相关阶段才请求 Modal 恢复结果（避免一打开网站就调用 Modal）
 _job_q = _qp_url.get("job_id")
 if _job_q:
     st.session_state["job_id"] = _job_q
-    if "modal_result" not in st.session_state:
+    _cur_stage = st.session_state.get("stage", "pay_first")
+    if _cur_stage in ("generating_preview", "preview", "final") and "modal_result" not in st.session_state:
         try:
             base = _get_modal_base_url()
             if base:
@@ -801,7 +802,6 @@ if _job_q:
                     st.session_state["preview_done"] = True
                     st.session_state["analysis_done"] = True
         except Exception:
-            # 恢复失败时静默忽略，避免影响正常流程
             pass
 
 
@@ -1157,15 +1157,13 @@ if _qp.get("trade_status") == "TRADE_SUCCESS":
                     st.session_state.stage = "upload"
                 st.rerun()
             else:
-                # 从收银台跳回的新标签页（新会话）：只显示提示，避免空白页
-                st.markdown(
-                    '<div style="text-align:center;padding:3rem 1.5rem;max-width:420px;margin:4rem auto;">'
-                    '<p style="font-size:1.1rem;color:#1d1d1f;margin-bottom:1.5rem;">✅ 支付成功</p>'
-                    '<p style="font-size:0.95rem;color:#6e6e73;line-height:1.6;">请关闭此页并返回原标签页继续使用。</p>'
-                    '</div>',
-                    unsafe_allow_html=True,
-                )
-                st.stop()
+                # 从收银台跳回（含新标签/新会话）：直接恢复订单状态并进入上传页，无需「返回原标签」
+                st.session_state["order_id"] = _cb_order
+                if st.session_state.get("preview_done") or st.session_state.get("analysis_done"):
+                    st.session_state.stage = "final"
+                else:
+                    st.session_state.stage = "upload"
+                st.rerun()
     else:
         print(f"[zpay-cb] 签名校验失败: {dict(_qp)}")
 
@@ -1756,7 +1754,7 @@ elif st.session_state.stage == "paying":
         )
 
         st.markdown(
-            f'<a href="{pay_url}" target="_blank" style="'
+            f'<a href="{pay_url}" style="'
             'display:inline-block;background:#0071e3;'
             'color:#fff;font-weight:500;font-size:1rem;padding:0.7rem 2.4rem;'
             'border-radius:12px;text-decoration:none;'
@@ -1767,7 +1765,7 @@ elif st.session_state.stage == "paying":
         )
         st.markdown(
             '<p style="color:#aeaeb2;font-size:0.82rem;margin-top:0.6rem">'
-            '在新标签页打开 · 支持微信 / 支付宝</p>',
+            '当前页跳转支付 · 支付完成后自动返回本站</p>',
             unsafe_allow_html=True,
         )
         st.markdown(
