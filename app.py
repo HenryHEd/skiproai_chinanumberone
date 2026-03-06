@@ -575,11 +575,6 @@ div.stDownloadButton > button:hover {
     margin-bottom: 0.5rem;
 }
 
-/* 网页端视频常被上下颠倒，翻转后 HUD 从左上角正确显示（与本地一致） */
-div[data-testid="stVideo"] video {
-    transform: scaleY(-1);
-}
-
 /* ── 输入框 ── */
 [data-testid="stTextInput"] input {
     background: rgba(255,255,255,0.8) !important;
