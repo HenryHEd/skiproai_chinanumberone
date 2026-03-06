@@ -575,7 +575,7 @@ div.stDownloadButton > button:hover {
     margin-bottom: 0.5rem;
 }
 
-/* 纠正网页端视频上下颠倒，使 HUD 实时数据从左上角正确显示（与 main.py 本地一致） */
+/* 网页端视频常被上下颠倒，翻转后 HUD 从左上角正确显示（与本地一致） */
 div[data-testid="stVideo"] video {
     transform: scaleY(-1);
 }
