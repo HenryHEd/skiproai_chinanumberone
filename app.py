@@ -174,15 +174,14 @@ class ZPayService:
         self.pid         = "2026030109230189"
         self.key         = "i9IoCmuGX8fDIXp57Ke7tgVgKEzVxzEv"
         self.api_url     = "https://zpayz.cn/submit.php"
-        # 应用基础 URL：支付成功后跳转至此，并带 ?stage=upload&order_id=xxx（自适应每次订单）
+        # 应用基础 URL：支付成功后跳转至此（文档要求 return_url/notify_url 不支持带参数，仅填纯地址）
         # 可用环境变量 APP_BASE_URL 或 ZPAY_RETURN_BASE 覆盖
         default_base     = "https://skiproai.streamlit.app"
         self.app_base_url = (
             os.environ.get("APP_BASE_URL") or os.environ.get("ZPAY_RETURN_BASE") or default_base
         ).rstrip("/")
-        # notify_url：Z-Pay 异步回调地址（服务端），可与应用同域
-        default_cb       = "https://skiproai.streamlit.app"
-        self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", default_cb)
+        # notify_url：Z-Pay 异步回调地址（文档要求不支持带参数）
+        self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", self.app_base_url)
         self.price_yuan  = "0.01"
         self.price_label = "¥0.01"
         self.pay_type    = "wxpay"
@@ -214,9 +213,8 @@ class ZPayService:
         if pay_type is None:
             pay_type = self.pay_type
         money_str = f"{float(amount):.2f}"
-        # 自适应 return_url：带 stage=upload 与当前 order_id，支付后回到上传页并恢复订单
-        return_url_raw = f"{self.app_base_url}?stage=upload&order_id={quote(order_id, safe='')}"
-        # 签名使用原始 return_url（与 Z-Pay 解码后验签的字符串一致）
+        # 文档要求 return_url 不支持带参数，仅传纯基础地址；支付结果通知会携带 out_trade_no，回调里用其恢复订单
+        return_url_raw = self.app_base_url
         sg = self._build_sign_str(
             money=money_str, name=name,
             notify_url=self.notify_url, out_trade_no=order_id,
