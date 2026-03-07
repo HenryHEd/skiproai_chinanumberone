@@ -182,8 +182,8 @@ class ZPayService:
         ).rstrip("/")
         # notify_url：Z-Pay 异步回调地址（文档要求不支持带参数）
         self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", self.app_base_url)
-        self.price_yuan  = "9.99"
-        self.price_label = "¥9.99"
+        self.price_yuan  = "0.01"
+        self.price_label = "¥0.01"
         self.pay_type    = "wxpay"
         self.site_name   = "Ski Pro AI"
 
@@ -369,15 +369,15 @@ html, body, [data-testid="stAppViewContainer"] {
     box-shadow: 0 8px 32px rgba(31,38,135,0.07);
 }
 
-/* ── 解锁卡片（渐变边框 + 金色点缀）── */
+/* ── 解锁卡片（玻璃拟物 + ICE_BLUE 顶条）────────────────────────────── */
 .unlock-card {
-    background: rgba(255,255,255,0.82);
+    background: rgba(255,255,255,0.75);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border-radius: 22px;
     padding: 2rem 2rem 1.6rem;
-    border: 1.5px solid rgba(0,113,227,0.18);
-    box-shadow: 0 12px 40px rgba(0,113,227,0.10),
+    border: 1.5px solid rgba(0,255,255,0.2);
+    box-shadow: 0 12px 40px rgba(0,255,255,0.08),
                 inset 0 1px 0 rgba(255,255,255,0.9);
     position: relative;
     overflow: hidden;
@@ -387,7 +387,7 @@ html, body, [data-testid="stAppViewContainer"] {
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 3px;
-    background: linear-gradient(90deg, #0071e3 0%, #34aadc 50%, #5ac8fa 100%);
+    background: linear-gradient(90deg, #00d4ff 0%, #00ffff 50%, #00ffcc 100%);
     border-radius: 22px 22px 0 0;
 }
 
@@ -415,15 +415,16 @@ html, body, [data-testid="stAppViewContainer"] {
     border-radius: 16px;
 }
 
-/* ── section 小标签 ── */
+/* ── section 小标签（与视频风格一致：ICE_BLUE + 霓虹）──────────────────── */
 .section-label {
     font-size: 0.72rem;
     font-weight: 600;
     letter-spacing: 0.12em;
-    color: #aeaeb2;
+    color: #00d4ff;
     text-transform: uppercase;
     margin-bottom: 0.6rem;
     display: block;
+    text-shadow: 0 0 12px rgba(0,255,255,0.35);
 }
 
 /* ── 步骤指示器 ── */
@@ -620,19 +621,22 @@ hr {
     margin-top: 1px;
 }
 
-/* ── 荣誉勋章 ── */
+/* ── 荣誉勋章（玻璃拟物 + ICE_BLUE #00FFFF）──────────────────────────── */
 .badge-wrap {
     display: flex;
     align-items: center;
     gap: 1.4rem;
     background: linear-gradient(135deg,
-        rgba(0,113,227,0.08) 0%, rgba(52,170,220,0.06) 100%);
-    border: 1.5px solid rgba(0,113,227,0.2);
+        rgba(0,255,255,0.06) 0%, rgba(28,40,56,0.4) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1.5px solid rgba(0,255,255,0.25);
     border-radius: 20px;
     padding: 1.4rem 2rem;
     margin-bottom: 1.6rem;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.12);
 }
 .badge-wrap::after {
     content: "";
@@ -641,35 +645,35 @@ hr {
     width: 120px; height: 120px;
     border-radius: 50%;
     background: radial-gradient(circle,
-        rgba(0,113,227,0.12) 0%, rgba(0,113,227,0) 70%);
+        rgba(0,255,255,0.12) 0%, rgba(0,255,255,0) 70%);
 }
 .badge-seal {
     width: 72px; height: 72px;
     border-radius: 50%;
-    background: linear-gradient(145deg, #0071e3 0%, #34aadc 100%);
+    background: linear-gradient(145deg, #00d4ff 0%, #00ffff 100%);
     display: flex; align-items: center; justify-content: center;
     font-size: 2rem;
-    box-shadow: 0 4px 16px rgba(0,113,227,0.35);
+    box-shadow: 0 4px 20px rgba(0,255,255,0.4);
     flex-shrink: 0;
 }
 .badge-text-main {
     font-size: 1.12rem;
     font-weight: 700;
-    color: #1d1d1f;
+    color: #f0f8ff;
     letter-spacing: -0.01em;
     line-height: 1.3;
 }
 .badge-text-sub {
     font-size: 0.8rem;
-    color: #6e6e73;
+    color: #b0c8e0;
     margin-top: 0.2rem;
     letter-spacing: 0.02em;
 }
 .badge-no {
     font-size: 0.72rem;
     font-family: "SF Mono", "Fira Code", monospace;
-    color: #0071e3;
-    background: rgba(0,113,227,0.08);
+    color: #00d4ff;
+    background: rgba(0,255,255,0.1);
     border-radius: 6px;
     padding: 2px 8px;
     margin-top: 0.4rem;
@@ -720,23 +724,26 @@ hr {
 
 }
 
-/* ── AI 教练寄语卡片 ── */
+/* ── AI 教练寄语卡片（玻璃拟物 + ICE_BLUE 左边线）────────────────────── */
 .coach-quote {
     background: linear-gradient(135deg,
-        rgba(0,113,227,0.07) 0%, rgba(90,200,250,0.06) 100%);
-    border-left: 4px solid #0071e3;
+        rgba(0,255,255,0.06) 0%, rgba(28,40,56,0.35) 100%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-left: 4px solid #00ffff;
     border-radius: 0 16px 16px 0;
     padding: 1.4rem 1.8rem;
     margin-top: 0.6rem;
     font-size: 1.05rem;
-    color: #1d1d1f;
+    color: #e8f4fc;
     line-height: 1.7;
     font-style: italic;
     letter-spacing: 0.01em;
+    box-shadow: 0 4px 24px rgba(0,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 .coach-quote-author {
     font-size: 0.78rem;
-    color: #aeaeb2;
+    color: #90b0d0;
     margin-top: 0.8rem;
     font-style: normal;
     letter-spacing: 0.04em;
@@ -1898,8 +1905,8 @@ elif st.session_state.stage == "final":
             r=values_user + [values_user[0]],
             theta=categories + [categories[0]],
             fill="toself",
-            fillcolor="rgba(0,113,227,0.18)",
-            line=dict(color="#0071e3", width=2.5),
+            fillcolor="rgba(0,255,255,0.18)",
+            line=dict(color="#00ffff", width=2.5),
             name=user_name,
             hovertemplate="%{theta}: %{r:.1f}<extra></extra>",
         ))
@@ -1907,8 +1914,8 @@ elif st.session_state.stage == "final":
             r=values_pro + [values_pro[0]],
             theta=categories + [categories[0]],
             fill="toself",
-            fillcolor="rgba(52,199,89,0.08)",
-            line=dict(color="#34c759", width=1.5, dash="dot"),
+            fillcolor="rgba(0,255,200,0.08)",
+            line=dict(color="#00ffcc", width=1.5, dash="dot"),
             name="冠军参考",
             hovertemplate="%{theta}: %{r:.1f}<extra></extra>",
         ))
