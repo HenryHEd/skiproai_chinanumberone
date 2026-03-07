@@ -29,7 +29,7 @@ os.environ.setdefault("MPLCONFIGDIR", _CACHE)
 # 可通过环境变量 MODAL_API_URL 或 st.secrets["MODAL_API_URL"] 覆盖。
 # ════════════════════════════════════════════════════════════════════════════════
 
-)
+
 
 import numpy as np
 import requests
