@@ -1,11 +1,9 @@
-# 使用 Python 官方镜像
-FROM python:3.9-slim
+# 将 python:3.9-slim 改为 python:3.10-slim 或更高
+FROM python:3.11-slim
 
-# 设置工作目录
 WORKDIR /app
 
-# 只安装最核心的依赖，减少报错几率
-# 加上 --fix-missing 应对网络抖动
+# 安装核心依赖
 RUN apt-get update --fix-missing && apt-get install -y \
     build-essential \
     curl \
@@ -20,8 +18,8 @@ COPY . .
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 暴露 Streamlit 默认端口
+# 暴露端口
 EXPOSE 8501
 
-# 启动命令
+# 启动
 ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
