@@ -28,9 +28,7 @@ os.environ.setdefault("MPLCONFIGDIR", _CACHE)
 # Modal 后端 API 基础地址（web_api，不含 /analyze、/status 等路径）
 # 可通过环境变量 MODAL_API_URL 或 st.secrets["MODAL_API_URL"] 覆盖。
 # ════════════════════════════════════════════════════════════════════════════════
-MODAL_API_URL = os.environ.get(
-    "MODAL_API_URL",
-    "https://henryhed--ski-pro-api-web-api.modal.run",
+
 )
 
 import numpy as np
