@@ -30,7 +30,6 @@ os.environ.setdefault("MPLCONFIGDIR", _CACHE)
 # ════════════════════════════════════════════════════════════════════════════════
 
 
-
 import numpy as np
 import requests
 import pandas as pd
@@ -174,14 +173,14 @@ class ZPayService:
         self.api_url     = "https://zpayz.cn/submit.php"
         # 应用基础 URL：支付成功后跳转至此（文档要求 return_url/notify_url 不支持带参数，仅填纯地址）
         # 可用环境变量 APP_BASE_URL 或 ZPAY_RETURN_BASE 覆盖
-        default_base     = "https://skiproai.streamlit.app"
+        default_base     = "https://skiproai.online"
         self.app_base_url = (
             os.environ.get("APP_BASE_URL") or os.environ.get("ZPAY_RETURN_BASE") or default_base
         ).rstrip("/")
         # notify_url：Z-Pay 异步回调地址（文档要求不支持带参数）
         self.notify_url  = os.environ.get("ZPAY_NOTIFY_URL", self.app_base_url)
-        self.price_yuan  = "9.99"
-        self.price_label = "¥9.99"
+        self.price_yuan  = "0.01"
+        self.price_label = "¥0.01"
         self.pay_type    = "wxpay"
         self.site_name   = "Ski Pro AI"
 
@@ -1125,7 +1124,7 @@ if _hero_demo_path is not None:
     st.markdown('<div class="apple-card animate-in" '
                 'style="max-width:960px;margin:0 auto 1.8rem;padding:0;overflow:hidden">',
                 unsafe_allow_html=True)
-    st.image(str(_hero_demo_path), use_column_width=True)
+    st.image(str(_hero_demo_path), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -2097,7 +2096,7 @@ elif st.session_state.stage == "final":
     st.markdown(
         '<div style="text-align:center;color:#aeaeb2;font-size:0.78rem;'
         'margin-top:3rem;padding-bottom:2rem;letter-spacing:0.03em">'
-        'Ski Pro AI · Powered by MediaPipe &amp; Streamlit · 数据已加密保存'
+        'Ski Pro AI · Powered by Henry He · 数据已加密保存'
         '</div>',
         unsafe_allow_html=True,
     )
