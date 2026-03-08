@@ -28,7 +28,10 @@ os.environ.setdefault("MPLCONFIGDIR", _CACHE)
 # Modal 后端 API 基础地址（web_api，不含 /analyze、/status 等路径）
 # 可通过环境变量 MODAL_API_URL 或 st.secrets["MODAL_API_URL"] 覆盖。
 # ════════════════════════════════════════════════════════════════════════════════
-
+MODAL_API_URL = os.environ.get(
+    "MODAL_API_URL",
+    "https://henryhed--ski-pro-api-web-api.modal.run",
+).strip() # 加上 .strip() 自动去掉前后的空格或换行
 
 import numpy as np
 import requests
@@ -39,6 +42,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(__file__))
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
