@@ -41,6 +41,7 @@ import io
 import inspect
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -856,6 +857,32 @@ def _sync_url_from_state():
         pass
 
 
+def _maybe_close_payment_return_tab() -> None:
+    """
+    支付完成页由「新标签打开收银台」跳回时，尝试关闭本标签并聚焦原标签。
+    依赖支付链接使用 target=\"_blank\" rel=\"opener\"，以便保留 window.opener。
+    同标签支付返回时 window.opener 为空，不会关闭当前页。
+    """
+    if not st.session_state.pop("_try_close_pay_return_tab", False):
+        return
+    components.html(
+        """
+        <script>
+        (function () {
+            try {
+                var topw = window.top || window;
+                if (window.opener && !window.opener.closed) {
+                    try { window.opener.focus(); } catch (e) {}
+                    topw.close();
+                }
+            } catch (e) {}
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+
 def _mark_paid_local(order_id: str, trade_no: str = "", money: str = "") -> None:
     """将支付结果写入本地 payment_status.json（主动查单成功后调用）。"""
     try:
@@ -1166,14 +1193,16 @@ if _qp.get("trade_status") == "TRADE_SUCCESS":
                     st.session_state.stage = "final"
                 else:
                     st.session_state.stage = "upload"
+                st.session_state["_try_close_pay_return_tab"] = True
                 st.rerun()
             else:
-                # 从收银台跳回（含新标签/新会话）：直接恢复订单状态并进入上传页，无需「返回原标签」
+                # 从收银台跳回（新标签 / 新会话）：恢复订单；下一帧尝试自动关闭本标签，仅保留原 Streamlit 标签页
                 st.session_state["order_id"] = _cb_order
                 if st.session_state.get("preview_done") or st.session_state.get("analysis_done"):
                     st.session_state.stage = "final"
                 else:
                     st.session_state.stage = "upload"
+                st.session_state["_try_close_pay_return_tab"] = True
                 st.rerun()
     else:
         print(f"[zpay-cb] 签名校验失败: {dict(_qp)}")
@@ -1262,6 +1291,8 @@ if st.session_state.stage == "pay_first":
 # STAGE 1 — 上传视频（支付完成后可见）
 # ═══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.stage == "upload":
+
+    _maybe_close_payment_return_tab()
 
     col_left, col_right = st.columns([3, 2])
 
@@ -1768,7 +1799,7 @@ elif st.session_state.stage == "paying":
         )
 
         st.markdown(
-            f'<a href="{pay_url}" style="'
+            f'<a href="{pay_url}" target="_blank" rel="opener" style="'
             'display:inline-block;background:#0071e3;'
             'color:#fff;font-weight:500;font-size:1rem;padding:0.7rem 2.4rem;'
             'border-radius:12px;text-decoration:none;'
@@ -1779,7 +1810,7 @@ elif st.session_state.stage == "paying":
         )
         st.markdown(
             '<p style="color:#aeaeb2;font-size:0.82rem;margin-top:0.6rem">'
-            '当前页跳转支付 · 支付完成后自动返回本站</p>',
+            '将在新标签打开收银台 · 支付成功后该页会自动关闭，请在本页继续操作</p>',
             unsafe_allow_html=True,
         )
         st.markdown(
@@ -1835,6 +1866,8 @@ elif st.session_state.stage == "paying":
 # STAGE 5 — 全量结果页（深度报告 · 仪式感满级）
 # ═══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.stage == "final":
+
+    _maybe_close_payment_return_tab()
 
     stats = _get_analysis_stats()
     files = st.session_state.get("modal_result", {}).get("files", {}) or {}
