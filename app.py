@@ -38,6 +38,7 @@ import requests
 import pandas as pd
 import base64
 import io
+import inspect
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -259,6 +260,7 @@ DATABASE_CSV   = Path(__file__).parent / "database.csv"
 PAYMENT_STATUS = Path(__file__).parent / "payment_status.json"
 ORDERS_FILE    = Path(__file__).parent / "orders.json"
 MAX_VIDEO_DURATION_SEC = 15
+MAX_VIDEO_UPLOAD_MB = 50  # 与 .streamlit/config.toml server.maxUploadSize 一致
 
 
 def _get_modal_base_url() -> str:
@@ -1274,11 +1276,14 @@ elif st.session_state.stage == "upload":
             unsafe_allow_html=True,
         )
 
-        uploaded = st.file_uploader(
-            label="拖拽或点击上传视频",
-            type=["mp4", "MP4", "mov", "MOV"],
-            label_visibility="collapsed",
-        )
+        _upload_kwargs = {
+            "label": "拖拽或点击上传视频",
+            "type": ["mp4", "MP4", "mov", "MOV"],
+            "label_visibility": "collapsed",
+        }
+        if "max_upload_size" in inspect.signature(st.file_uploader).parameters:
+            _upload_kwargs["max_upload_size"] = MAX_VIDEO_UPLOAD_MB
+        uploaded = st.file_uploader(**_upload_kwargs)
 
         st.markdown("<br>", unsafe_allow_html=True)
         user_name = st.text_input(
@@ -1336,7 +1341,7 @@ elif st.session_state.stage == "upload":
                     st.warning("请填写您的昵称！")
                 else:
                     video_bytes = uploaded.read()
-                    max_size_mb = 50
+                    max_size_mb = MAX_VIDEO_UPLOAD_MB
                     max_size_bytes = max_size_mb * 1024 * 1024
                     if len(video_bytes) > max_size_bytes:
                         size_mb = len(video_bytes) / 1024 / 1024
